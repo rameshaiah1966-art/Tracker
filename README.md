@@ -18,7 +18,9 @@ Here's how to set up a simple local HTTPS server to run this application.
 ### Prerequisites
 
 -   [Node.js and npm](https://nodejs.org/en/) installed on your computer.
--   [OpenSSL](https://www.openssl.org/) command-line tool installed. (This is pre-installed on macOS and most Linux distributions).
+-   [OpenSSL](https://www.openssl.org/) command-line tool installed.
+    -   **macOS/Linux:** OpenSSL is pre-installed.
+    -   **Windows:** The easiest way to get OpenSSL is to install [Git for Windows](https://git-scm.com/download/win) and use the included **Git Bash** terminal, which has OpenSSL built-in.
 
 ### 1. Generate a Self-Signed SSL Certificate
 
@@ -60,3 +62,25 @@ To test the sensor functionality, you need to access this server from a device w
 4.  You will see the same privacy warning. Accept it to proceed.
 5.  Click the "Start Sensors" button and grant the necessary permissions when prompted.
 6.  You should now see the 3D model rotate as you move your phone.
+
+## Troubleshooting
+
+### Symptom: The "Start Sensors" button is clicked, but nothing happens.
+
+If you click the button and the 3D model does not start moving, and you are not prompted for any permissions, here are the most likely causes:
+
+1.  **Not Using HTTPS:** The browser will silently fail to access sensors if the page is not loaded over a secure `https://` connection.
+    -   **Solution:** Make sure the URL in your browser's address bar starts with `https://` and not `http://` or `file://`. Follow the instructions above to use the `http-server --ssl` command.
+
+2.  **Sensor Permissions are Blocked:** You may have previously denied sensor access for this site, or your browser may be configured to block them by default.
+    -   **Solution:**
+        -   In your browser, click the padlock icon in the address bar next to the URL.
+        -   Go to "Site settings" or "Permissions".
+        -   Find the "Sensors" or "Motion Sensors" permission and make sure it is set to "Allow".
+        -   Reload the page and try again.
+
+3.  **Browser or Device Not Supported:** The Web Sensor APIs are modern features and may not be supported on all browsers or devices.
+    -   **Solution:** This application works best on up-to-date versions of Chrome or Firefox on a modern smartphone (Android or iOS). It may not work on desktop browsers (as they lack the required sensors) or on older mobile browsers.
+
+4.  **Secure Context Error (on mobile):** When accessing the server from your phone, you must use the `https://` URL. If you accepted the security warning on your computer but not on your phone, it will not work.
+    -   **Solution:** Ensure you have navigated to `https://<your-computer-ip>:8080/client/index.html` on your phone's browser and have accepted the security warning there as well.
