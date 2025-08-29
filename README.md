@@ -8,6 +8,7 @@ This web application uses your device's sensors (specifically the accelerometer 
 -   **3D Position Tracking & Path Tracing:**
     -   Calculates the device's position in 3D space by integrating accelerometer data.
     -   Draws a red line in the 3D scene to trace the calculated path of the device.
+    -   Displays the calculated X, Y, and Z distance from the starting point in a dedicated UI panel.
     -   Includes a "Reset Position & Trace" button to reset the calculation, which is necessary to manage sensor drift.
 -   **Velocity Plotting:** Visualizes angular and linear velocity in real-time using bar graphs.
 -   **Scene Helpers:** Includes a grid and XYZ axes to provide a clear frame of reference for orientation and movement.
