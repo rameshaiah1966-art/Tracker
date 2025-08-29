@@ -17,7 +17,11 @@ This web application uses your device's sensors (specifically the accelerometer 
 
 ### Important Limitation: Position Tracking Accuracy
 
-The position tracking feature is for **demonstration purposes only** and is **not accurate**. Calculating position from phone sensors (IMU) is a classic engineering problem. Even tiny, unavoidable errors in the sensor readings accumulate very quickly, causing the calculated position to "drift" away from the true position within seconds. The "Reset" button is provided to help manage this drift during short demos.
+Calculating position from phone sensors (IMU) is a classic engineering problem. Even tiny, unavoidable errors in the sensor readings accumulate very quickly, causing the calculated position to "drift" away from the true position.
+
+To combat this, this application implements a **Zero-Velocity Update (ZUPT) filter**. This filter detects when the device is being held still and resets the calculated velocity to zero, preventing drift when the device is not moving.
+
+While this makes the position tracking much more stable, **some drift during active movement is still unavoidable**. The ZUPT filter does not correct for errors that accumulate while the device is in motion. The "Reset Position & Trace" button is provided to clear the calculated position and start fresh.
 
 ## How to Run
 

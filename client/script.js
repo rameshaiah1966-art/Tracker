@@ -10,13 +10,30 @@ const angVelBars = { x: document.getElementById('ang-vel-x'), y: document.getEle
 const linVelBars = { x: document.getElementById('lin-vel-x'), y: document.getElementById('lin-vel-y'), z: document.getElementById('lin-vel-z') };
 const distEls = { x: document.getElementById('dist-x'), y: document.getElementById('dist-y'), z: document.getElementById('dist-z') };
 
-// --- State Variables ---
+// --- State Variables & Filter Constants ---
 let deviceLinVel = { x: 0, y: 0, z: 0 };
 let angVel = { x: 0, y: 0, z: 0 };
 let worldPosition = new THREE.Vector3(0, 0, 0);
 let worldVelocity = new THREE.Vector3(0, 0, 0);
 let deviceOrientation = new THREE.Quaternion();
 let lastTimestamp = null;
+
+// ZUPT (Zero-Velocity Update) Filter parameters. This is a simple but effective
+// filter to combat drift. When the device is held still (low acceleration and rotation),
+// the velocity is reset to zero, preventing it from drifting.
+
+// How sensitive the filter is to accelerometer noise. A lower value means the
+// device must be held more still to trigger the filter.
+const ZUPT_ACCEL_THRESHOLD = 0.2; // m/s^2
+
+// How sensitive the filter is to gyroscope noise. A lower value means the
+// device must be held more still to trigger the filter.
+const ZUPT_GYRO_THRESHOLD = 0.2;  // rad/s
+
+// How many consecutive "still" samples are needed to trigger the velocity reset.
+// A higher value makes the filter less sensitive to brief pauses.
+const ZUPT_SAMPLES_NEEDED = 15; // ~250ms at 60Hz
+let zuptSampleCount = 0;
 
 // --- Three.js Setup ---
 const sceneContainer = document.getElementById('scene-container');
@@ -34,7 +51,6 @@ function initThree() {
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(1, 2, 3);
     scene.add(directionalLight);
-
     const gridHelper = new THREE.GridHelper(30, 30);
     scene.add(gridHelper);
     const axesHelper = new THREE.AxesHelper(1);
@@ -101,7 +117,6 @@ function animate() {
 
     renderer.render(scene, camera);
 
-    // Update UI text
     updateBar(angVelBars.x, angVel.x, 10);
     updateBar(angVelBars.y, angVel.y, 10);
     updateBar(angVelBars.z, angVel.z, 10);
@@ -118,6 +133,7 @@ function resetTrace() {
     worldVelocity.set(0, 0, 0);
     deviceLinVel = { x: 0, y: 0, z: 0 };
     lastTimestamp = null;
+    zuptSampleCount = 0;
     tracePoints = [new THREE.Vector3(0, 0, 0)];
     if (traceLine) {
         traceLine.geometry.setFromPoints(tracePoints);
@@ -160,14 +176,31 @@ startButton.addEventListener('click', () => {
             const deviceAcceleration = new THREE.Vector3();
             accelerometer.addEventListener('reading', () => {
                 const now = accelerometer.timestamp;
+
+                const accelMagnitude = Math.sqrt(accelerometer.x**2 + accelerometer.y**2 + accelerometer.z**2);
+                const gyroMagnitude = Math.sqrt(angVel.x**2 + angVel.y**2 + angVel.z**2);
+
+                if (accelMagnitude < ZUPT_ACCEL_THRESHOLD && gyroMagnitude < ZUPT_GYRO_THRESHOLD) {
+                    zuptSampleCount++;
+                    if (zuptSampleCount >= ZUPT_SAMPLES_NEEDED) {
+                        worldVelocity.set(0, 0, 0);
+                        deviceLinVel = { x: 0, y: 0, z: 0 };
+                    }
+                } else {
+                    zuptSampleCount = 0;
+                    if (lastTimestamp) {
+                        const dt = (now - lastTimestamp) / 1000;
+                        deviceLinVel.x += accelerometer.x * dt;
+                        deviceLinVel.y += accelerometer.y * dt;
+                        deviceLinVel.z += accelerometer.z * dt;
+                        deviceAcceleration.set(accelerometer.x, accelerometer.y, accelerometer.z);
+                        const worldAcceleration = deviceAcceleration.clone().applyQuaternion(deviceOrientation);
+                        worldVelocity.addScaledVector(worldAcceleration, dt);
+                    }
+                }
+
                 if (lastTimestamp) {
                     const dt = (now - lastTimestamp) / 1000;
-                    deviceLinVel.x += accelerometer.x * dt;
-                    deviceLinVel.y += accelerometer.y * dt;
-                    deviceLinVel.z += accelerometer.z * dt;
-                    deviceAcceleration.set(accelerometer.x, accelerometer.y, accelerometer.z);
-                    const worldAcceleration = deviceAcceleration.clone().applyQuaternion(deviceOrientation);
-                    worldVelocity.addScaledVector(worldAcceleration, dt);
                     worldPosition.addScaledVector(worldVelocity, dt);
                 }
                 lastTimestamp = now;
