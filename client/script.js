@@ -1,38 +1,32 @@
 console.log("Script loaded. Three.js version:", THREE.REVISION);
 
 const startButton = document.getElementById('start-button');
+const resetButton = document.getElementById('reset-button');
 const accelerometerDataEl = document.getElementById('accelerometer-data');
 const gyroscopeDataEl = document.getElementById('gyroscope-data');
 
-// --- Plotting UI Elements ---
-const angVelBars = {
-    x: document.getElementById('ang-vel-x'),
-    y: document.getElementById('ang-vel-y'),
-    z: document.getElementById('ang-vel-z')
-};
-const linVelBars = {
-    x: document.getElementById('lin-vel-x'),
-    y: document.getElementById('lin-vel-y'),
-    z: document.getElementById('lin-vel-z')
-};
+const angVelBars = { x: document.getElementById('ang-vel-x'), y: document.getElementById('ang-vel-y'), z: document.getElementById('ang-vel-z') };
+const linVelBars = { x: document.getElementById('lin-vel-x'), y: document.getElementById('lin-vel-y'), z: document.getElementById('lin-vel-z') };
 
-// --- State Variables ---
-let linVel = { x: 0, y: 0, z: 0 };
+let deviceLinVel = { x: 0, y: 0, z: 0 };
 let angVel = { x: 0, y: 0, z: 0 };
+let worldPosition = new THREE.Vector3(0, 0, 0);
+let worldVelocity = new THREE.Vector3(0, 0, 0);
+let deviceOrientation = new THREE.Quaternion();
 let lastTimestamp = null;
 
-// --- Three.js Setup ---
 const sceneContainer = document.getElementById('scene-container');
-let scene, camera, renderer, device;
+let scene, camera, renderer, device, traceLine;
+let tracePoints = [];
 
 function initThree() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf0f0f0);
     camera = new THREE.PerspectiveCamera(50, sceneContainer.clientWidth / sceneContainer.clientHeight, 0.1, 1000);
-    camera.position.z = 4;
+    camera.position.set(0, 1.6, 6); // Adjusted camera position
+    camera.lookAt(0, 0, 0);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(1, 2, 3);
     scene.add(directionalLight);
@@ -41,10 +35,17 @@ function initThree() {
     renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
     sceneContainer.appendChild(renderer.domElement);
 
-    const geometry = new THREE.BoxGeometry(1, 2, 0.15);
+    const geometry = new THREE.BoxGeometry(0.5, 1, 0.075); // Scaled down for better view of trace
     const material = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.2 });
     device = new THREE.Mesh(geometry, material);
     scene.add(device);
+
+    // Initialize the trace line
+    const traceMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+    const traceGeometry = new THREE.BufferGeometry();
+    traceLine = new THREE.Line(traceGeometry, traceMaterial);
+    scene.add(traceLine);
+    resetTrace(); // Call reset to initialize points
 
     window.addEventListener('resize', onWindowResize, false);
     animate();
@@ -59,86 +60,103 @@ function onWindowResize() {
 
 function updateBar(barElement, value, maxVal) {
     if (!barElement) return;
-    const percentage = Math.min(Math.abs(value) / maxVal, 1) * 50; // Max 50% width from center
+    const percentage = Math.min(Math.abs(value) / maxVal, 1) * 50;
     barElement.style.width = `${percentage}%`;
-
-    if (value < 0) {
-        barElement.style.transform = 'translateX(-100%)';
-        barElement.style.backgroundColor = '#dc3545'; // Red for negative
-    } else {
-        barElement.style.transform = 'translateX(0%)';
-        barElement.style.backgroundColor = '#007bff'; // Blue for positive
-    }
+    barElement.style.backgroundColor = value < 0 ? '#dc3545' : '#007bff';
+    barElement.style.transform = value < 0 ? 'translateX(-100%)' : 'translateX(0%)';
 }
 
 function animate() {
     requestAnimationFrame(animate);
-    if (renderer && scene && camera) {
-        renderer.render(scene, camera);
+    device.position.copy(worldPosition);
+
+    // Update the trace line
+    const lastPoint = tracePoints[tracePoints.length - 1];
+    if (lastPoint && device.position.distanceTo(lastPoint) > 0.05) { // Add point if moved > 5cm
+        tracePoints.push(device.position.clone());
+        traceLine.geometry.setFromPoints(tracePoints);
     }
-    // Update plots continuously
-    updateBar(angVelBars.x, angVel.x, 10); // Max angular velocity of 10 rad/s for plotting
+
+    renderer.render(scene, camera);
+    // Update velocity plots
+    updateBar(angVelBars.x, angVel.x, 10);
     updateBar(angVelBars.y, angVel.y, 10);
     updateBar(angVelBars.z, angVel.z, 10);
-
-    updateBar(linVelBars.x, linVel.x, 5); // Max linear velocity of 5 m/s for plotting
-    updateBar(linVelBars.y, linVel.y, 5);
-    updateBar(linVelBars.z, linVel.z, 5);
+    updateBar(linVelBars.x, deviceLinVel.x, 5);
+    updateBar(linVelBars.y, deviceLinVel.y, 5);
+    updateBar(linVelBars.z, deviceLinVel.z, 5);
 }
 
-// --- Sensor Logic ---
+function resetTrace() {
+    worldPosition.set(0, 0, 0);
+    worldVelocity.set(0, 0, 0);
+    deviceLinVel = { x: 0, y: 0, z: 0 };
+    lastTimestamp = null; // Reset timestamp to avoid large dt jump
+
+    // Reset the line
+    tracePoints = [new THREE.Vector3(0, 0, 0)];
+    if (traceLine) {
+        traceLine.geometry.setFromPoints(tracePoints);
+    }
+}
+
+// --- Event Listeners ---
 startButton.addEventListener('click', () => {
     startButton.disabled = true;
-
-    // 1. Orientation Sensor (for 3D model)
+    resetButton.disabled = false;
+    // Sensor initialization logic... (as before)
     try {
-        if ('RelativeOrientationSensor' in window) {
-            const sensor = new RelativeOrientationSensor({ frequency: 60, referenceFrame: 'device' });
-            sensor.addEventListener('reading', () => device.quaternion.fromArray(sensor.quaternion));
+        if ('AbsoluteOrientationSensor' in window) {
+            const sensor = new AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'device' });
+            sensor.addEventListener('reading', () => {
+                deviceOrientation.fromArray(sensor.quaternion);
+                device.quaternion.copy(deviceOrientation);
+            });
             sensor.start();
-            gyroscopeDataEl.textContent = 'Status: Active (Fused Sensor)';
-            accelerometerDataEl.textContent = 'This sensor provides the final orientation.';
-        } else {
-            // Fallback for orientation if RelativeOrientationSensor is not available
-            gyroscopeDataEl.textContent = 'Status: Using Gyroscope fallback for orientation.';
+            gyroscopeDataEl.textContent = 'Status: Active (Absolute Orientation)';
+        } else if ('RelativeOrientationSensor' in window) {
+            const sensor = new RelativeOrientationSensor({ frequency: 60, referenceFrame: 'device' });
+            sensor.addEventListener('reading', () => {
+                deviceOrientation.fromArray(sensor.quaternion);
+                device.quaternion.copy(deviceOrientation);
+            });
+            sensor.start();
+            gyroscopeDataEl.textContent = 'Status: Active (Relative Fallback)';
         }
-    } catch (error) {
-        console.error("Orientation Sensor Error:", error);
-        gyroscopeDataEl.textContent = `Error: ${error.message}`;
-    }
-
-    // 2. Gyroscope (for Angular Velocity Plot)
+    } catch (error) { console.error("Orientation Sensor Error:", error); }
     try {
         if ('Gyroscope' in window) {
             const gyroscope = new Gyroscope({ frequency: 60 });
-            gyroscope.addEventListener('reading', () => {
-                angVel = { x: gyroscope.x, y: gyroscope.y, z: gyroscope.z };
-            });
+            gyroscope.addEventListener('reading', () => angVel = { x: gyroscope.x, y: gyroscope.y, z: gyroscope.z });
             gyroscope.start();
-        } else {
-            console.error("Gyroscope API not supported.");
         }
     } catch(e) { console.error("Gyroscope plot error:", e)}
-
-    // 3. Linear Acceleration Sensor (for Linear Velocity Plot)
     try {
         if ('LinearAccelerationSensor' in window) {
             const accelerometer = new LinearAccelerationSensor({ frequency: 60 });
+            const deviceAcceleration = new THREE.Vector3();
             accelerometer.addEventListener('reading', () => {
+                const now = accelerometer.timestamp;
                 if (lastTimestamp) {
-                    const dt = (accelerometer.timestamp - lastTimestamp) / 1000;
-                    linVel.x += accelerometer.x * dt;
-                    linVel.y += accelerometer.y * dt;
-                    linVel.z += accelerometer.z * dt;
+                    const dt = (now - lastTimestamp) / 1000;
+                    deviceLinVel.x += accelerometer.x * dt;
+                    deviceLinVel.y += accelerometer.y * dt;
+                    deviceLinVel.z += accelerometer.z * dt;
+                    deviceAcceleration.set(accelerometer.x, accelerometer.y, accelerometer.z);
+                    const worldAcceleration = deviceAcceleration.clone().applyQuaternion(deviceOrientation);
+                    worldVelocity.addScaledVector(worldAcceleration, dt);
+                    worldPosition.addScaledVector(worldVelocity, dt);
                 }
-                lastTimestamp = accelerometer.timestamp;
+                lastTimestamp = now;
             });
             accelerometer.start();
+            accelerometerDataEl.textContent = 'Position tracking is active.';
         } else {
-            console.error("LinearAccelerationSensor API not supported.");
+            accelerometerDataEl.textContent = 'Position tracking unavailable.';
         }
-    } catch(e) { console.error("Linear Acceleration plot error:", e)}
+    } catch(e) { console.error("Linear Acceleration error:", e)}
 });
 
-// Initialize the Three.js scene when the script loads
+resetButton.addEventListener('click', resetTrace);
+
 initThree();

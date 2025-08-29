@@ -4,12 +4,17 @@ This web application uses your device's sensors (specifically the accelerometer 
 
 ## Features
 
--   **Real-time Orientation Tracking:** Uses the `RelativeOrientationSensor` API to get stable orientation data.
--   **3D Visualization:** Renders a 3D model of a phone-like device that mirrors your physical device's orientation.
--   **Velocity Plotting:** Visualizes the raw angular velocity (from the gyroscope) and a calculated linear velocity (from the accelerometer) in real-time using bar graphs.
-    -   *Note:* The linear velocity calculation is subject to significant drift over time due to the nature of integrating noisy sensor data. It is included for demonstration purposes only.
--   **Cross-browser Compatibility:** Includes fallback logic to use the raw `Gyroscope` data for orientation on browsers that do not support `RelativeOrientationSensor`.
+-   **Absolute Orientation Tracking:** Uses the `AbsoluteOrientationSensor` to align the 3D model with the Earth's coordinate system (Z-axis points up from gravity, other axes are compass-aligned).
+-   **3D Position Tracking & Path Tracing:**
+    -   Calculates the device's position in 3D space by integrating accelerometer data.
+    -   Draws a red line in the 3D scene to trace the calculated path of the device.
+    -   Includes a "Reset Position & Trace" button to reset the calculation, which is necessary to manage sensor drift.
+-   **Velocity Plotting:** Visualizes angular and linear velocity in real-time using bar graphs.
 -   **Responsive:** The 3D scene adapts to the window size.
+
+### Important Limitation: Position Tracking Accuracy
+
+The position tracking feature is for **demonstration purposes only** and is **not accurate**. Calculating position from phone sensors (IMU) is a classic engineering problem. Even tiny, unavoidable errors in the sensor readings accumulate very quickly, causing the calculated position to "drift" away from the true position within seconds. The "Reset" button is provided to help manage this drift during short demos.
 
 ## How to Run
 
