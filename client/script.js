@@ -9,7 +9,6 @@ const sceneContainer = document.getElementById('scene-container');
 let scene, camera, renderer, device;
 
 function initThree() {
-    console.log("Initializing Three.js scene...");
     // Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf0f0f0);
@@ -49,7 +48,6 @@ function initThree() {
 
     // Start animation loop
     animate();
-    console.log("Three.js scene initialized and animation loop started.");
 }
 
 function onWindowResize() {
@@ -73,12 +71,9 @@ startButton.addEventListener('click', () => {
     startButton.disabled = true;
 
     try {
-        console.log("Checking for RelativeOrientationSensor...");
         if ('RelativeOrientationSensor' in window) {
-            console.log("RelativeOrientationSensor found. Trying to instantiate...");
             const options = { frequency: 60, referenceFrame: 'device' };
             const sensor = new RelativeOrientationSensor(options);
-            console.log("RelativeOrientationSensor instantiated.");
 
             sensor.addEventListener('reading', () => {
                 if (device && sensor.quaternion) {
@@ -87,16 +82,17 @@ startButton.addEventListener('click', () => {
             });
 
             sensor.addEventListener('error', (event) => {
-                console.error("RelativeOrientationSensor error:", event.error.name, event.error.message);
+                console.error("Sensor error:", event.error.name, event.error.message);
+                gyroscopeDataEl.textContent = `Error: ${event.error.message}`;
+                accelerometerDataEl.textContent = 'Trying to use Gyroscope fallback...';
             });
             sensor.start();
-            console.log("RelativeOrientationSensor started.");
+            gyroscopeDataEl.textContent = 'Status: Active (using Fused Sensor)';
+            accelerometerDataEl.textContent = 'This sensor provides the final orientation.';
+
         } else {
-            console.log("RelativeOrientationSensor not found. Falling back to Gyroscope.");
             if ('Gyroscope' in window) {
-                console.log("Gyroscope found. Trying to instantiate...");
                 const gyroscope = new Gyroscope({ frequency: 60 });
-                console.log("Gyroscope instantiated.");
                 gyroscope.addEventListener('reading', () => {
                     if(device) {
                         const dt = 1/60;
@@ -106,16 +102,18 @@ startButton.addEventListener('click', () => {
                     }
                 });
                 gyroscope.start();
-                console.log("Gyroscope started.");
+                gyroscopeDataEl.textContent = 'Status: Active (using Gyroscope fallback)';
+                accelerometerDataEl.textContent = '—';
             } else {
-                 console.error("Fallback failed: Gyroscope API not supported.");
+                 const errorMsg = "Error: Gyroscope API not supported.";
+                 gyroscopeDataEl.textContent = errorMsg;
+                 accelerometerDataEl.textContent = errorMsg;
             }
         }
     } catch (error) {
         console.error("An error occurred during sensor initialization:", error.name, error.message);
-        if (error.name === 'SecurityError') {
-             console.error("This can happen if the page is not served over HTTPS.");
-        }
+        gyroscopeDataEl.textContent = `Error: ${error.message}`;
+        accelerometerDataEl.textContent = 'Please see console for details.';
     }
 });
 
