@@ -10,6 +10,8 @@ This web application uses your device's sensors (specifically the accelerometer 
     -   Draws a red line in the 3D scene to trace the calculated path of the device.
     -   Includes a "Reset Position & Trace" button to reset the calculation, which is necessary to manage sensor drift.
 -   **Velocity Plotting:** Visualizes angular and linear velocity in real-time using bar graphs.
+-   **Scene Helpers:** Includes a grid and XYZ axes to provide a clear frame of reference for orientation and movement.
+-   **Dynamic Camera:** The camera automatically pans and zooms to keep the entire movement path in view.
 -   **Responsive:** The 3D scene adapts to the window size.
 
 ### Important Limitation: Position Tracking Accuracy

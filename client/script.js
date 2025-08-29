@@ -31,6 +31,12 @@ function initThree() {
     directionalLight.position.set(1, 2, 3);
     scene.add(directionalLight);
 
+    // Add Grid and Axes helpers
+    const gridHelper = new THREE.GridHelper(30, 30);
+    scene.add(gridHelper);
+    const axesHelper = new THREE.AxesHelper(1);
+    scene.add(axesHelper);
+
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
     sceneContainer.appendChild(renderer.domElement);
@@ -75,6 +81,25 @@ function animate() {
     if (lastPoint && device.position.distanceTo(lastPoint) > 0.05) { // Add point if moved > 5cm
         tracePoints.push(device.position.clone());
         traceLine.geometry.setFromPoints(tracePoints);
+    }
+
+    // Adjust camera to fit the trace
+    if (tracePoints.length > 1) {
+        const boundingBox = new THREE.Box3().setFromPoints(tracePoints);
+        const center = new THREE.Vector3();
+        boundingBox.getCenter(center);
+        const size = new THREE.Vector3();
+        boundingBox.getSize(size);
+
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const fov = camera.fov * (Math.PI / 180);
+        const cameraDistance = Math.abs(maxDim / (2 * Math.tan(fov / 2)));
+
+        const margin = 1.5;
+        const newCamPos = new THREE.Vector3(center.x, center.y + size.y / 2, center.z + cameraDistance * margin);
+
+        camera.position.lerp(newCamPos, 0.05);
+        camera.lookAt(center);
     }
 
     renderer.render(scene, camera);
