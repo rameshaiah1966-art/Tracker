@@ -1,0 +1,39 @@
+body {
+    font-family: sans-serif;
+    background-color: #f0f0f0;
+    color: #333;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+h1 {
+    color: #005a9c;
+}
+
+#sensor-data {
+    margin: 20px 0;
+    padding: 15px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background-color: #fff;
+    width: 80%;
+    max-width: 600px;
+}
+
+#sensor-data p {
+    margin: 5px 0;
+    font-family: monospace;
+}
+
+#scene-container {
+    width: 80%;
+    max-width: 600px;
+    height: 400px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    margin-top: 20px;
+    background-color: #fff;
+}
