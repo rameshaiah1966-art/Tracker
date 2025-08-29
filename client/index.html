@@ -14,6 +14,28 @@
         <p>Gyroscope: <span id="gyroscope-data">Waiting for user permission...</span></p>
     </div>
     <div id="scene-container"></div>
+
+    <div id="velocity-plots">
+        <h2>Velocity Plots</h2>
+        <div class="plot-container">
+            <h3>Angular Velocity (from Gyroscope)</h3>
+            <div class="plot" id="angular-velocity-plot">
+                <div class="axis"><span class="label">X:</span><div class="bar-container"><div class="bar" id="ang-vel-x"></div></div></div>
+                <div class="axis"><span class="label">Y:</span><div class="bar-container"><div class="bar" id="ang-vel-y"></div></div></div>
+                <div class="axis"><span class="label">Z:</span><div class="bar-container"><div class="bar" id="ang-vel-z"></div></div></div>
+            </div>
+        </div>
+        <div class="plot-container">
+            <h3>Linear Velocity (from Accelerometer)</h3>
+            <p class="note">Note: This value drifts significantly over time due to sensor inaccuracies and is for demonstration only.</p>
+            <div class="plot" id="linear-velocity-plot">
+                <div class="axis"><span class="label">X:</span><div class="bar-container"><div class="bar" id="lin-vel-x"></div></div></div>
+                <div class="axis"><span class="label">Y:</span><div class="bar-container"><div class="bar" id="lin-vel-y"></div></div></div>
+                <div class="axis"><span class="label">Z:</span><div class="bar-container"><div class="bar" id="lin-vel-z"></div></div></div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="script.js"></script>
 </body>

@@ -6,7 +6,9 @@ This web application uses your device's sensors (specifically the accelerometer 
 
 -   **Real-time Orientation Tracking:** Uses the `RelativeOrientationSensor` API to get stable orientation data.
 -   **3D Visualization:** Renders a 3D model of a phone-like device that mirrors your physical device's orientation.
--   **Cross-browser Compatibility:** Includes fallback logic to use the raw `Gyroscope` data on browsers that do not support `RelativeOrientationSensor`.
+-   **Velocity Plotting:** Visualizes the raw angular velocity (from the gyroscope) and a calculated linear velocity (from the accelerometer) in real-time using bar graphs.
+    -   *Note:* The linear velocity calculation is subject to significant drift over time due to the nature of integrating noisy sensor data. It is included for demonstration purposes only.
+-   **Cross-browser Compatibility:** Includes fallback logic to use the raw `Gyroscope` data for orientation on browsers that do not support `RelativeOrientationSensor`.
 -   **Responsive:** The 3D scene adapts to the window size.
 
 ## How to Run
