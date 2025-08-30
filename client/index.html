@@ -3,35 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Signal Visualizer</title>
+    <title>Environmental Signal Detector</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Signal Visualizer</h1>
+    <h1>Environmental Signal Detector</h1>
     <div id="app-container">
-        <canvas id="waveform-canvas"></canvas>
+        <div id="visualization-area">
+            <div class="canvas-container">
+                <h3>Waveform (Time Domain)</h3>
+                <canvas id="waveform-canvas"></canvas>
+            </div>
+            <div class="canvas-container">
+                <h3>Spectrum (Frequency Domain)</h3>
+                <canvas id="spectrum-canvas"></canvas>
+            </div>
+        </div>
         <div id="controls">
-            <button id="start-stop-button">Start</button>
+            <button id="start-stop-button">Start Listening</button>
             <div class="control-group">
-                <label for="frequency-slider">Frequency</label>
-                <input type="range" id="frequency-slider" min="20" max="20000" value="440" step="1">
-                <span id="frequency-display">440 Hz</span>
+                <label for="frequency-input">Target Frequency (Hz)</label>
+                <input type="number" id="frequency-input" value="1000" min="20" max="20000">
             </div>
             <div class="control-group">
-                <label>Band</label>
-                <div id="band-buttons">
-                    <button class="band-button active" data-band="hz">Hz</button>
-                    <button class="band-button" data-band="khz">kHz</button>
-                    <button class="band-button" data-band="mhz">MHz</button>
-                </div>
-            </div>
-             <div class="control-group">
-                <label for="gain-slider">Gain</label>
-                <input type="range" id="gain-slider" min="0" max="1" value="0.5" step="0.01">
-                <span id="gain-display">0.5</span>
+                <label for="gain-slider">Amplification</label>
+                <input type="range" id="gain-slider" min="0" max="50" value="10" step="1">
+                <span id="gain-display">10 dB</span>
             </div>
         </div>
     </div>
+    <p id="status-message">Click "Start Listening" to begin processing audio from your microphone.</p>
     <script src="script.js"></script>
 </body>
 </html>
