@@ -30,12 +30,14 @@ h1, h3 {
 
 #visualization-area {
     display: flex;
+    flex-wrap: wrap;
     gap: 1.5rem;
     width: 100%;
 }
 
 .canvas-container {
     flex: 1;
+    min-width: 300px;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -64,7 +66,12 @@ canvas {
     padding: 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.75rem;
+    align-items: center; /* Center items for knob */
+}
+
+.frequency-control {
+    justify-content: space-between;
 }
 
 label {
@@ -73,27 +80,49 @@ label {
 }
 
 input[type="range"] {
-    width: 100%;
+    width: 80%;
 }
 
-input[type="number"] {
-    background-color: #1a1a1a;
-    color: #f0f0f0;
-    border: 1px solid #555;
-    border-radius: 4px;
-    padding: 0.5rem;
-    font-size: 1.1rem;
-    width: calc(100% - 1rem);
-}
-
-#gain-display {
+#frequency-display, #gain-display {
     font-family: monospace;
     font-size: 1.1rem;
     text-align: center;
     background: #1a1a1a;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
+    width: 80px;
+    margin-top: 0.5rem;
 }
+
+#band-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.band-button {
+    background-color: #444;
+    color: #f0f0f0;
+    border: 1px solid #666;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+    flex-grow: 1;
+}
+
+.band-button.active {
+    background-color: #00aaff;
+    border-color: #00aaff;
+    color: #1a1a1a;
+    font-weight: bold;
+}
+
+.band-button:hover:not(.active) {
+    background-color: #555;
+}
+
 
 #start-stop-button {
     background-color: #007bff;

@@ -1,7 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Elements ---
     const startStopButton = document.getElementById('start-stop-button');
-    const frequencyInput = document.getElementById('frequency-input');
+    const frequencyKnob = document.getElementById('frequency-knob');
+    const frequencyDisplay = document.getElementById('frequency-display');
+    const bandButtons = document.querySelectorAll('.band-button');
     const gainSlider = document.getElementById('gain-slider');
     const gainDisplay = document.getElementById('gain-display');
     const waveformCanvas = document.getElementById('waveform-canvas');
@@ -18,30 +20,25 @@ document.addEventListener('DOMContentLoaded', () => {
     let analyserNode;
     let isRunning = false;
     let animationFrameId;
+    let currentBand = 'hz';
 
     // --- Visualization ---
     function visualize() {
-        // Setup for Time Domain (Waveform)
         const waveformBufferLength = analyserNode.fftSize;
         const waveformDataArray = new Uint8Array(waveformBufferLength);
-
-        // Setup for Frequency Domain (Spectrum)
         const spectrumBufferLength = analyserNode.frequencyBinCount;
         const spectrumDataArray = new Uint8Array(spectrumBufferLength);
 
         function draw() {
             if (!isRunning) return;
-
             animationFrameId = requestAnimationFrame(draw);
-
-            // --- Draw Waveform ---
             analyserNode.getByteTimeDomainData(waveformDataArray);
             waveformCtx.fillStyle = '#000';
             waveformCtx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
             waveformCtx.lineWidth = 2;
             waveformCtx.strokeStyle = '#00aaff';
             waveformCtx.beginPath();
-            const sliceWidth = waveformCanvas.width * 1.0 / waveformBufferLength;
+            let sliceWidth = waveformCanvas.width * 1.0 / waveformBufferLength;
             let x = 0;
             for (let i = 0; i < waveformBufferLength; i++) {
                 const v = waveformDataArray[i] / 128.0;
@@ -53,7 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
             waveformCtx.lineTo(waveformCanvas.width, waveformCanvas.height / 2);
             waveformCtx.stroke();
 
-            // --- Draw Spectrum ---
             analyserNode.getByteFrequencyData(spectrumDataArray);
             spectrumCtx.fillStyle = '#000';
             spectrumCtx.fillRect(0, 0, spectrumCanvas.width, spectrumCanvas.height);
@@ -73,9 +69,66 @@ document.addEventListener('DOMContentLoaded', () => {
         draw();
     }
 
+    // --- Update Functions ---
+    function updateFrequency() {
+        if (!audioCtx) return;
+        const knobValue = parseFloat(frequencyKnob.value);
+        let multiplier = 1;
+        let displayUnit = 'Hz';
+
+        switch(currentBand) {
+            case 'khz':
+                multiplier = 1000;
+                displayUnit = 'kHz';
+                break;
+            case 'mhz':
+                multiplier = 1000000;
+                displayUnit = 'MHz';
+                break;
+        }
+
+        const targetFrequency = knobValue * multiplier;
+
+        if (filterNode) {
+            // Clamp frequency to the valid range for an AudioContext
+            const maxFreq = audioCtx.sampleRate / 2;
+            const clampedFreq = Math.max(20, Math.min(targetFrequency, maxFreq));
+            filterNode.frequency.setValueAtTime(clampedFreq, audioCtx.currentTime);
+        }
+
+        frequencyDisplay.textContent = `${knobValue.toFixed(0)} ${displayUnit}`;
+    }
+
+    function updateBand() {
+        let min, max, value;
+        switch(currentBand) {
+            case 'khz':
+                min = 1; max = 20; value = 1; // 1-20 kHz
+                break;
+            case 'mhz':
+                min = 1; max = 5000; value = 1; // 1-5000 MHz (conceptual)
+                break;
+            case 'hz':
+            default:
+                min = 20; max = 2000; value = 440; // 20-2000 Hz
+                break;
+        }
+        frequencyKnob.min = min;
+        frequencyKnob.max = max;
+        frequencyKnob.value = value;
+
+        // The `input-knobs` library needs a manual refresh after attribute changes
+        if(frequencyKnob.refresh) {
+            frequencyKnob.refresh();
+        }
+
+        updateFrequency();
+    }
+
     // --- Audio Control ---
     async function startAudio() {
-        if (isRunning) return;
+        // ... (startAudio function remains the same as before)
+         if (isRunning) return;
         try {
             statusMessage.textContent = "Requesting microphone permission...";
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -85,21 +138,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
             filterNode = audioCtx.createBiquadFilter();
             filterNode.type = 'peaking';
-            filterNode.frequency.value = parseFloat(frequencyInput.value);
             filterNode.gain.value = parseFloat(gainSlider.value);
-            filterNode.Q.value = 10; // Quality factor
+            filterNode.Q.value = 10;
 
             gainNode = audioCtx.createGain();
-            gainNode.gain.value = 1.0; // Master volume, keep it fixed for now
+            gainNode.gain.value = 1.0;
 
             analyserNode = audioCtx.createAnalyser();
             analyserNode.fftSize = 2048;
 
-            // Connect graph: Mic -> Filter -> Gain -> Analyser -> Speakers
             micSource.connect(filterNode);
             filterNode.connect(gainNode);
             gainNode.connect(analyserNode);
             analyserNode.connect(audioCtx.destination);
+
+            updateBand(); // Set initial frequency based on default band
 
             isRunning = true;
             startStopButton.textContent = 'Stop Listening';
@@ -115,20 +168,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function stopAudio() {
+        // ... (stopAudio function remains the same as before)
         if (!isRunning) return;
-
-        // Gracefully shut down the audio context and tracks
         if (audioCtx) {
             audioCtx.close().then(() => {
                 micSource.mediaStream.getTracks().forEach(track => track.stop());
                 audioCtx = null;
             });
         }
-
         cancelAnimationFrame(animationFrameId);
         waveformCtx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
         spectrumCtx.clearRect(0, 0, spectrumCanvas.width, spectrumCanvas.height);
-
         isRunning = false;
         startStopButton.textContent = 'Start Listening';
         startStopButton.classList.remove('running');
@@ -137,20 +187,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners ---
     startStopButton.addEventListener('click', () => {
-        if (isRunning) {
-            stopAudio();
-        } else {
-            startAudio();
-        }
+        if (isRunning) stopAudio();
+        else startAudio();
     });
 
-    frequencyInput.addEventListener('input', (e) => {
-        if (filterNode) {
-            const freq = parseFloat(e.target.value);
-            if (freq > 0) {
-                 filterNode.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            }
-        }
+    frequencyKnob.addEventListener('input', updateFrequency);
+
+    bandButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            bandButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            currentBand = button.dataset.band;
+            updateBand();
+        });
     });
 
     gainSlider.addEventListener('input', (e) => {
@@ -163,7 +212,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Initial State ---
     function init() {
-        // Set canvas sizes based on container
         const container = document.querySelector('.canvas-container');
         const style = window.getComputedStyle(container);
         const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
@@ -175,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
         spectrumCanvas.height = 200;
 
         gainDisplay.textContent = `${gainSlider.value} dB`;
+        updateBand(); // Set initial knob range and display
     }
 
     init();
