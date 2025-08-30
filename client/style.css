@@ -11,7 +11,7 @@ body {
     min-height: 100vh;
 }
 
-h1, h3 {
+h1, h2, h3 {
     color: #00aaff;
     text-align: center;
 }
@@ -22,7 +22,7 @@ h1, h3 {
     padding: 2rem;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     width: 90%;
-    max-width: 900px;
+    max-width: 1000px;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
@@ -53,11 +53,32 @@ canvas {
     background-color: #000;
 }
 
+.text-input-group {
+    padding: 1rem;
+    background-color: #333;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#absolute-frequency-input {
+    background-color: #1a1a1a;
+    color: #f0f0f0;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 0.5rem;
+    font-size: 1.2rem;
+    text-align: center;
+    width: 200px;
+}
+
 #controls {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1.5rem;
-    align-items: center;
+    align-items: start;
 }
 
 .control-group {
@@ -67,49 +88,37 @@ canvas {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    align-items: center; /* Center items for knob */
+    align-items: center;
+    height: 100%; /* Make groups equal height */
 }
 
 .frequency-control {
-    justify-content: space-between;
+    justify-content: space-around;
 }
 
 label {
     font-weight: bold;
     color: #00aaff;
-}
-
-input[type="range"] {
-    width: 80%;
-}
-
-#frequency-display, #gain-display {
-    font-family: monospace;
-    font-size: 1.1rem;
-    text-align: center;
-    background: #1a1a1a;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    width: 80px;
-    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
 }
 
 #band-buttons {
-    display: flex;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
     width: 100%;
+    margin-top: 1rem;
 }
 
 .band-button {
     background-color: #444;
     color: #f0f0f0;
     border: 1px solid #666;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem;
     border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.2s, border-color 0.2s;
-    flex-grow: 1;
+    text-align: center;
 }
 
 .band-button.active {
@@ -119,12 +128,30 @@ input[type="range"] {
     font-weight: bold;
 }
 
-.band-button:hover:not(.active) {
-    background-color: #555;
+#gain-display {
+    font-family: monospace;
+    font-size: 1.1rem;
+    background: #1a1a1a;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
 }
 
+#frequency-display-area {
+    background-color: #111;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    margin-top: 1rem;
+}
+
+#frequency-display {
+    color: #00ffaa;
+    font-family: monospace;
+    font-size: 1.5rem;
+}
 
 #start-stop-button {
+    grid-column: 1 / -1; /* Span full width */
     background-color: #007bff;
     color: white;
     font-size: 1.2rem;
@@ -134,15 +161,11 @@ input[type="range"] {
     padding: 1rem;
     cursor: pointer;
     transition: background-color 0.2s;
-    grid-column: 1 / -1; /* Span full width */
+    margin-bottom: 1rem;
 }
 
 #start-stop-button.running {
     background-color: #dc3545;
-}
-
-#start-stop-button:hover {
-    opacity: 0.9;
 }
 
 #status-message {

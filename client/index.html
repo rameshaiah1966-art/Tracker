@@ -19,17 +19,27 @@
                 <canvas id="spectrum-canvas"></canvas>
             </div>
         </div>
+
+        <div class="control-group text-input-group">
+            <label for="absolute-frequency-input">Set Absolute Frequency (Hz)</label>
+            <input type="number" id="absolute-frequency-input" placeholder="e.g., 1500">
+        </div>
+
         <div id="controls">
             <button id="start-stop-button">Start Listening</button>
             <div class="control-group frequency-control">
-                <label>Frequency</label>
-                <input type="range" class="input-knob" id="frequency-knob" min="20" max="2000" value="440">
-                 <div id="band-buttons">
-                    <button class="band-button active" data-band="hz">Hz</button>
-                    <button class="band-button" data-band="khz">kHz</button>
+                <label>Coarse Tune</label>
+                <input type="range" class="input-knob" id="coarse-knob" min="0" max="20" value="1" step="0.01" data-diameter="100">
+                <div id="band-buttons">
+                    <button class="band-button active" data-band="khz">kHz</button>
+                    <button class="band-button" data-band="hz">Hz</button>
                     <button class="band-button" data-band="mhz">MHz</button>
+                    <button class="band-button" data-band="ghz">GHz</button>
                 </div>
-                <span id="frequency-display">440 Hz</span>
+            </div>
+            <div class="control-group frequency-control">
+                <label>Fine Tune (Hz)</label>
+                <input type="range" class="input-knob" id="fine-knob" min="0" max="999" value="0" step="1" data-diameter="100">
             </div>
             <div class="control-group">
                 <label for="gain-slider">Amplification</label>
@@ -37,8 +47,11 @@
                 <span id="gain-display">10 dB</span>
             </div>
         </div>
+        <div id="frequency-display-area">
+            <h2>Target Frequency: <span id="frequency-display">1.00 kHz</span></h2>
+        </div>
     </div>
-    <p id="status-message">Click "Start Listening" to begin processing audio from your microphone.</p>
+    <p id="status-message">Click "Start Listening" to begin.</p>
 
     <script src="https://g200kg.github.io/input-knobs/input-knobs.js"></script>
     <script src="script.js"></script>

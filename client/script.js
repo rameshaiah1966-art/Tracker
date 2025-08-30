@@ -1,9 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Elements ---
     const startStopButton = document.getElementById('start-stop-button');
-    const frequencyKnob = document.getElementById('frequency-knob');
-    const frequencyDisplay = document.getElementById('frequency-display');
+    const coarseKnob = document.getElementById('coarse-knob');
+    const fineKnob = document.getElementById('fine-knob');
     const bandButtons = document.querySelectorAll('.band-button');
+    const frequencyDisplay = document.getElementById('frequency-display');
+    const absoluteFrequencyInput = document.getElementById('absolute-frequency-input');
     const gainSlider = document.getElementById('gain-slider');
     const gainDisplay = document.getElementById('gain-display');
     const waveformCanvas = document.getElementById('waveform-canvas');
@@ -20,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let analyserNode;
     let isRunning = false;
     let animationFrameId;
-    let currentBand = 'hz';
+    let currentBand = 'khz';
 
     // --- Visualization ---
     function visualize() {
@@ -70,110 +72,139 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Update Functions ---
-    function updateFrequency() {
-        if (!audioCtx) return;
-        const knobValue = parseFloat(frequencyKnob.value);
-        let multiplier = 1;
-        let displayUnit = 'Hz';
-
-        switch(currentBand) {
-            case 'khz':
-                multiplier = 1000;
-                displayUnit = 'kHz';
-                break;
-            case 'mhz':
-                multiplier = 1000000;
-                displayUnit = 'MHz';
-                break;
-        }
-
-        const targetFrequency = knobValue * multiplier;
-
-        if (filterNode) {
-            // Clamp frequency to the valid range for an AudioContext
-            const maxFreq = audioCtx.sampleRate / 2;
-            const clampedFreq = Math.max(20, Math.min(targetFrequency, maxFreq));
-            filterNode.frequency.setValueAtTime(clampedFreq, audioCtx.currentTime);
-        }
-
-        frequencyDisplay.textContent = `${knobValue.toFixed(0)} ${displayUnit}`;
+    function formatFrequency(hz) {
+        if (hz >= 1000000000) return `${(hz / 1000000000).toFixed(2)} GHz`;
+        if (hz >= 1000000) return `${(hz / 1000000).toFixed(2)} MHz`;
+        if (hz >= 1000) return `${(hz / 1000).toFixed(2)} kHz`;
+        return `${hz.toFixed(2)} Hz`;
     }
 
-    function updateBand() {
-        let min, max, value;
+    function updateFrequencyFromKnobs() {
+        const coarseValue = parseFloat(coarseKnob.value);
+        const fineValue = parseFloat(fineKnob.value);
+        let multiplier = 1;
+
         switch(currentBand) {
-            case 'khz':
-                min = 1; max = 20; value = 1; // 1-20 kHz
-                break;
-            case 'mhz':
-                min = 1; max = 5000; value = 1; // 1-5000 MHz (conceptual)
-                break;
+            case 'hz': multiplier = 1; break;
+            case 'khz': multiplier = 1000; break;
+            case 'mhz': multiplier = 1000000; break;
+            case 'ghz': multiplier = 1000000000; break;
+        }
+
+        const totalFrequency = (coarseValue * multiplier) + fineValue;
+
+        absoluteFrequencyInput.value = totalFrequency.toFixed(0);
+        frequencyDisplay.textContent = formatFrequency(totalFrequency);
+
+        if (filterNode) {
+            const maxFreq = audioCtx.sampleRate / 2;
+            const clampedFreq = Math.max(20, Math.min(totalFrequency, maxFreq));
+            filterNode.frequency.setValueAtTime(clampedFreq, audioCtx.currentTime);
+        }
+    }
+
+    function updateKnobsFromAbsolute() {
+        const totalFrequency = parseFloat(absoluteFrequencyInput.value);
+        if (isNaN(totalFrequency) || totalFrequency < 0) return;
+
+        let band, coarse, fine, multiplier;
+
+        if (totalFrequency >= 1000000000) {
+            band = 'ghz';
+            multiplier = 1000000000;
+        } else if (totalFrequency >= 1000000) {
+            band = 'mhz';
+            multiplier = 1000000;
+        } else if (totalFrequency >= 1000) {
+            band = 'khz';
+            multiplier = 1000;
+        } else {
+            band = 'hz';
+            multiplier = 1;
+        }
+
+        const step = coarseKnob.step;
+        const decimals = step.includes('.') ? step.split('.')[1].length : 0;
+
+        coarse = parseFloat((totalFrequency / multiplier).toFixed(decimals));
+        fine = totalFrequency - (coarse * multiplier);
+
+        // Update UI
+        bandButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.band === band);
+        });
+        currentBand = band;
+
+        updateBandRanges();
+        coarseKnob.value = coarse;
+        fineKnob.value = fine;
+
+        if(coarseKnob.refresh) coarseKnob.refresh();
+        if(fineKnob.refresh) fineKnob.refresh();
+
+        // Directly update display and filter, do not recall updateFrequencyFromKnobs
+        frequencyDisplay.textContent = formatFrequency(totalFrequency);
+        if (filterNode) {
+            const maxFreq = audioCtx.sampleRate / 2;
+            const clampedFreq = Math.max(20, Math.min(totalFrequency, maxFreq));
+            filterNode.frequency.setValueAtTime(clampedFreq, audioCtx.currentTime);
+        }
+    }
+
+    function updateBandRanges() {
+        let coarseMax, fineMax, coarseStep;
+        switch(currentBand) {
+            case 'ghz': coarseMax = 5; coarseStep = 0.01; fineMax = 999999999; break;
+            case 'mhz': coarseMax = 5000; coarseStep = 0.01; fineMax = 999999; break;
+            case 'khz': coarseMax = 22000; coarseStep = 0.01; fineMax = 999; break; // Allow up to 22MHz, in kHz units
             case 'hz':
-            default:
-                min = 20; max = 2000; value = 440; // 20-2000 Hz
-                break;
+            default: coarseMax = 22050; coarseStep = 1; fineMax = 0; break; // Audible range
         }
-        frequencyKnob.min = min;
-        frequencyKnob.max = max;
-        frequencyKnob.value = value;
-
-        // The `input-knobs` library needs a manual refresh after attribute changes
-        if(frequencyKnob.refresh) {
-            frequencyKnob.refresh();
-        }
-
-        updateFrequency();
+        coarseKnob.max = coarseMax;
+        coarseKnob.step = coarseStep;
+        fineKnob.max = fineMax;
+        if(coarseKnob.refresh) coarseKnob.refresh();
+        if(fineKnob.refresh) fineKnob.refresh();
     }
 
     // --- Audio Control ---
     async function startAudio() {
-        // ... (startAudio function remains the same as before)
-         if (isRunning) return;
+        if (isRunning) return;
         try {
-            statusMessage.textContent = "Requesting microphone permission...";
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             micSource = audioCtx.createMediaStreamSource(stream);
-
             filterNode = audioCtx.createBiquadFilter();
             filterNode.type = 'peaking';
             filterNode.gain.value = parseFloat(gainSlider.value);
-            filterNode.Q.value = 10;
-
+            filterNode.Q.value = 50; // Higher Q for more precision
             gainNode = audioCtx.createGain();
             gainNode.gain.value = 1.0;
-
             analyserNode = audioCtx.createAnalyser();
             analyserNode.fftSize = 2048;
-
             micSource.connect(filterNode);
             filterNode.connect(gainNode);
             gainNode.connect(analyserNode);
             analyserNode.connect(audioCtx.destination);
 
-            updateBand(); // Set initial frequency based on default band
+            updateBandRanges();
+            updateFrequencyFromKnobs();
 
             isRunning = true;
             startStopButton.textContent = 'Stop Listening';
             startStopButton.classList.add('running');
-            statusMessage.textContent = "Listening... Adjust frequency and amplification.";
-
+            statusMessage.textContent = "Listening...";
             visualize();
-
         } catch (err) {
-            console.error('Error accessing microphone:', err);
-            statusMessage.textContent = `Error: ${err.message}. Please grant microphone permission.`;
+            statusMessage.textContent = `Error: ${err.message}`;
         }
     }
 
     function stopAudio() {
-        // ... (stopAudio function remains the same as before)
         if (!isRunning) return;
         if (audioCtx) {
             audioCtx.close().then(() => {
                 micSource.mediaStream.getTracks().forEach(track => track.stop());
-                audioCtx = null;
             });
         }
         cancelAnimationFrame(animationFrameId);
@@ -187,18 +218,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners ---
     startStopButton.addEventListener('click', () => {
-        if (isRunning) stopAudio();
-        else startAudio();
+        isRunning ? stopAudio() : startAudio();
     });
 
-    frequencyKnob.addEventListener('input', updateFrequency);
+    coarseKnob.addEventListener('input', updateFrequencyFromKnobs);
+    fineKnob.addEventListener('input', updateFrequencyFromKnobs);
+    absoluteFrequencyInput.addEventListener('change', updateKnobsFromAbsolute);
 
     bandButtons.forEach(button => {
         button.addEventListener('click', () => {
+            // 1. Set the new band
+            currentBand = button.dataset.band;
             bandButtons.forEach(btn => btn.classList.remove('active'));
             button.classList.add('active');
-            currentBand = button.dataset.band;
-            updateBand();
+
+            // 2. Update knob ranges
+            updateBandRanges();
+
+            // 3. Recalculate knob values from the absolute frequency
+            const totalFrequency = parseFloat(absoluteFrequencyInput.value);
+            if (isNaN(totalFrequency)) return;
+
+            const step = coarseKnob.step;
+            const decimals = step.includes('.') ? step.split('.')[1].length : 0;
+            let multiplier = 1;
+            let displayUnit = 'Hz';
+            switch(currentBand) {
+                case 'hz': multiplier = 1; displayUnit = 'Hz'; break;
+                case 'khz': multiplier = 1000; displayUnit = 'kHz'; break;
+                case 'mhz': multiplier = 1000000; displayUnit = 'MHz'; break;
+                case 'ghz': multiplier = 1000000000; displayUnit = 'GHz'; break;
+            }
+
+            const coarseValue = parseFloat((totalFrequency / multiplier).toFixed(decimals));
+            const fineValue = Math.round(totalFrequency - (coarseValue * multiplier));
+
+            coarseKnob.value = coarseValue;
+            fineKnob.value = fineValue;
+
+            if(coarseKnob.refresh) coarseKnob.refresh();
+            if(fineKnob.refresh) fineKnob.refresh();
+
+            // 4. Manually update the display text
+            frequencyDisplay.textContent = `${coarseValue.toFixed(2)} ${displayUnit}`;
+
+            // 5. Manually update the audio filter
+            if (filterNode) {
+                const maxFreq = audioCtx.sampleRate / 2;
+                const clampedFreq = Math.max(20, Math.min(totalFrequency, maxFreq));
+                filterNode.frequency.setValueAtTime(clampedFreq, audioCtx.currentTime);
+            }
         });
     });
 
@@ -213,17 +282,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Initial State ---
     function init() {
         const container = document.querySelector('.canvas-container');
-        const style = window.getComputedStyle(container);
-        const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-        const newWidth = container.clientWidth - padding;
-
-        waveformCanvas.width = newWidth;
-        spectrumCanvas.width = newWidth;
-        waveformCanvas.height = 200;
-        spectrumCanvas.height = 200;
-
+        if (container) {
+            const style = window.getComputedStyle(container);
+            const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+            const newWidth = container.clientWidth - padding;
+            waveformCanvas.width = newWidth;
+            spectrumCanvas.width = newWidth;
+            waveformCanvas.height = 200;
+            spectrumCanvas.height = 200;
+        }
         gainDisplay.textContent = `${gainSlider.value} dB`;
-        updateBand(); // Set initial knob range and display
+        updateBandRanges();
+        updateFrequencyFromKnobs();
     }
 
     init();
