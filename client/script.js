@@ -3,87 +3,138 @@ console.log("Script loaded. Three.js version:", THREE.REVISION);
 // --- DOM Elements ---
 const startButton = document.getElementById('start-button');
 const resetButton = document.getElementById('reset-button');
-// ... (other DOM elements)
+const accelerometerDataEl = document.getElementById('accelerometer-data');
+const gyroscopeDataEl = document.getElementById('gyroscope-data');
+// ... (rest of DOM elements)
 const distEls = { x: document.getElementById('dist-x'), y: document.getElementById('dist-y'), z: document.getElementById('dist-z') };
-// ... (other canvas elements)
+const mapCanvas = document.getElementById('map-canvas');
+const mapCtx = mapCanvas.getContext('2d');
+const graphCanvas = document.getElementById('distance-graph-canvas');
+const graphCtx = graphCanvas.getContext('2d');
 
 // --- State Variables & Constants ---
-let worldPosition = new THREE.Vector3(0, 0, 0);
-let filteredPosition = new THREE.Vector3(0, 0, 0);
-// ... (other state variables)
-let kfX, kfY, kfZ; // To be initialized later
+// ... (rest of state variables)
+let worldPosition = new THREE.Vector3(0, 0, 0), worldVelocity = new THREE.Vector3(0, 0, 0);
+let deviceOrientation = new THREE.Quaternion(), lastTimestamp = null;
+// ... (ZUPT and Kalman filter variables)
+let kfX, kfY, kfZ;
+let tracePoints = [], positionHistory = [];
+const MAX_HISTORY = 500;
 
-// ... (other constants and variables)
 
 // --- Main Setup ---
-function initThree() {
-    // ... (existing initThree logic)
-    resetTrace(); // This will now also initialize the Kalman filters
-    // ...
-}
+// ... (initThree remains the same)
 
 // --- UI & Drawing Functions ---
 // ... (onWindowResize, drawMap, updateBar, drawDistanceGraph remain the same)
 
-function animate() {
-    requestAnimationFrame(animate);
+// --- Animation Loop ---
+// ... (animate remains the same)
 
-    // Apply Kalman filter to the raw position data
-    filteredPosition.x = kfX.filter(worldPosition.x);
-    filteredPosition.y = kfY.filter(worldPosition.y);
-    filteredPosition.z = kfZ.filter(worldPosition.z);
+// --- Reset Function ---
+// ... (resetTrace remains the same)
 
-    // ALL visual updates should now use the FILTERED position
-    device.position.copy(filteredPosition);
-    if (positionHistory.push(filteredPosition.clone()) > MAX_HISTORY) {
-        positionHistory.shift();
+
+// --- SENSOR INITIALIZATION (NEW ROBUST APPROACH) ---
+
+async function startSensors() {
+    startButton.disabled = true;
+    gyroscopeDataEl.textContent = 'Requesting permissions...';
+
+    try {
+        // Use the Permissions API to query for the state of the sensors.
+        const accelerometerPermission = await navigator.permissions.query({ name: 'accelerometer' });
+        const gyroscopePermission = await navigator.permissions.query({ name: 'gyroscope' });
+        const magnetometerPermission = await navigator.permissions.query({ name: 'magnetometer' });
+
+        if (accelerometerPermission.state === 'denied' || gyroscopePermission.state === 'denied' || magnetometerPermission.state === 'denied') {
+            gyroscopeDataEl.textContent = 'Error: Sensor permission denied.';
+            accelerometerDataEl.textContent = 'Please allow sensor access in browser settings.';
+            return;
+        }
+
+        // If permissions are granted or prompt, proceed to initialize all sensors.
+        // Group all initializations in a single try/catch for robust error handling.
+
+        // 1. Orientation Sensor
+        if ('AbsoluteOrientationSensor' in window) {
+            const orientationSensor = new AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'device' });
+            orientationSensor.addEventListener('reading', () => {
+                deviceOrientation.fromArray(orientationSensor.quaternion);
+                device.quaternion.copy(deviceOrientation);
+            });
+            orientationSensor.start();
+            gyroscopeDataEl.textContent = 'Status: Active (Absolute Orientation)';
+        } else {
+            gyroscopeDataEl.textContent = 'Error: AbsoluteOrientationSensor not supported.';
+            // Do not proceed if the core orientation sensor is missing.
+            return;
+        }
+
+        // 2. Gyroscope (for Angular Velocity Plot)
+        if ('Gyroscope' in window) {
+            const gyroscope = new Gyroscope({ frequency: 60 });
+            gyroscope.addEventListener('reading', () => {
+                angVel = { x: gyroscope.x, y: gyroscope.y, z: gyroscope.z };
+            });
+            gyroscope.start();
+        }
+
+        // 3. Linear Acceleration Sensor (for Position Calculation)
+        if ('LinearAccelerationSensor' in window) {
+            const accelerometer = new LinearAccelerationSensor({ frequency: 60 });
+            accelerometer.addEventListener('reading', () => {
+                // ... (ZUPT and integration logic remains the same)
+                const now = accelerometer.timestamp;
+                const accelMagnitude = Math.sqrt(accelerometer.x**2 + accelerometer.y**2 + accelerometer.z**2);
+                const gyroMagnitude = Math.sqrt(angVel.x**2 + angVel.y**2 + angVel.z**2);
+
+                if (accelMagnitude < ZUPT_ACCEL_THRESHOLD && gyroMagnitude < ZUPT_GYRO_THRESHOLD) {
+                    zuptSampleCount++;
+                    if (zuptSampleCount >= ZUPT_SAMPLES_NEEDED) {
+                        worldVelocity.set(0, 0, 0);
+                        deviceLinVel = { x: 0, y: 0, z: 0 };
+                    }
+                } else {
+                    zuptSampleCount = 0;
+                    if (lastTimestamp) {
+                        const dt = (now - lastTimestamp) / 1000;
+                        deviceLinVel.x += accelerometer.x * dt;
+                        deviceLinVel.y += accelerometer.y * dt;
+                        deviceLinVel.z += accelerometer.z * dt;
+                        const deviceAcceleration = new THREE.Vector3(accelerometer.x, accelerometer.y, accelerometer.z);
+                        const worldAcceleration = deviceAcceleration.clone().applyQuaternion(deviceOrientation);
+                        worldVelocity.addScaledVector(worldAcceleration, dt);
+                    }
+                }
+
+                if (lastTimestamp) {
+                    const dt = (now - lastTimestamp) / 1000;
+                    worldPosition.addScaledVector(worldVelocity, dt);
+                }
+                lastTimestamp = now;
+            });
+            accelerometer.start();
+            accelerometerDataEl.textContent = 'Position tracking is active.';
+        } else {
+            accelerometerDataEl.textContent = 'Position tracking unavailable.';
+        }
+
+        resetButton.disabled = false;
+
+    } catch (error) {
+        console.error("A critical error occurred during sensor initialization:", error);
+        gyroscopeDataEl.textContent = `Error: ${error.name}.`;
+        accelerometerDataEl.textContent = 'See console for details. Is the page HTTPS?';
     }
-    const lastPoint = tracePoints[tracePoints.length - 1];
-    if (lastPoint && filteredPosition.distanceTo(lastPoint) > 0.05) {
-        tracePoints.push(filteredPosition.clone());
-        traceLine.geometry.setFromPoints(tracePoints);
-    }
-
-    // ... (camera logic remains the same, as it uses tracePoints which are now filtered)
-
-    renderer.render(scene, camera);
-    drawMap();
-    drawDistanceGraph();
-
-    // ... (updateBar logic remains the same)
-
-    // Update distance display with filtered data
-    distEls.x.textContent = filteredPosition.x.toFixed(2);
-    distEls.y.textContent = filteredPosition.y.toFixed(2);
-    distEls.z.textContent = filteredPosition.z.toFixed(2);
-}
-
-function resetTrace() {
-    worldPosition.set(0, 0, 0);
-    worldVelocity.set(0, 0, 0);
-    deviceLinVel = { x: 0, y: 0, z: 0 };
-    lastTimestamp = null;
-    zuptSampleCount = 0;
-
-    // Re-initialize Kalman filters to reset their state
-    kfX = new KalmanFilter({R: 0.01, Q: 3});
-    kfY = new KalmanFilter({R: 0.01, Q: 3});
-    kfZ = new KalmanFilter({R: 0.01, Q: 3});
-
-    // Initialize filtered position
-    filteredPosition.set(0,0,0);
-
-    tracePoints = [new THREE.Vector3(0, 0, 0)];
-    positionHistory = [new THREE.Vector3(0, 0, 0)];
-    if (traceLine) traceLine.geometry.setFromPoints(tracePoints);
 }
 
 // --- Event Listeners ---
-// ... (startButton listener with sensor logic remains the same)
+startButton.addEventListener('click', startSensors);
+resetButton.addEventListener('click', resetTrace);
 
-// The rest of the file is the same...
-// I will just paste the full correct file to avoid errors.
-// ... (full file content below)
+// I will now paste the full, correct script content to ensure no placeholders remain.
+// ... (Pasting full file content below)
 console.log("Script loaded. Three.js version:", THREE.REVISION);
 
 const startButton = document.getElementById('start-button');
@@ -255,33 +306,48 @@ function resetTrace() {
     if (traceLine) traceLine.geometry.setFromPoints(tracePoints);
 }
 
-startButton.addEventListener('click', () => {
+async function startSensors() {
     startButton.disabled = true;
-    resetButton.disabled = false;
+    gyroscopeDataEl.textContent = 'Requesting permissions...';
+
     try {
-        if ('AbsoluteOrientationSensor' in window) {
-            const sensor = new AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'device' });
-            sensor.addEventListener('reading', () => { deviceOrientation.fromArray(sensor.quaternion); device.quaternion.copy(deviceOrientation); });
-            sensor.start();
-            gyroscopeDataEl.textContent = 'Status: Active (Absolute Orientation)';
-        } else if ('RelativeOrientationSensor' in window) {
-            const sensor = new RelativeOrientationSensor({ frequency: 60, referenceFrame: 'device' });
-            sensor.addEventListener('reading', () => { deviceOrientation.fromArray(sensor.quaternion); device.quaternion.copy(deviceOrientation); });
-            sensor.start();
-            gyroscopeDataEl.textContent = 'Status: Active (Relative Fallback)';
+        const motionPermissions = await Promise.all([
+            navigator.permissions.query({ name: 'accelerometer' }),
+            navigator.permissions.query({ name: 'gyroscope' }),
+            navigator.permissions.query({ name: 'magnetometer' })
+        ]);
+
+        if (motionPermissions.some(p => p.state === 'denied')) {
+            gyroscopeDataEl.textContent = 'Error: Sensor permission denied.';
+            accelerometerDataEl.textContent = 'Please allow sensor access in browser settings.';
+            startButton.disabled = false;
+            return;
         }
-    } catch (error) { console.error("Orientation Sensor Error:", error); }
-    try {
+
+        // --- All sensor initializations in one block ---
+
+        // 1. Orientation Sensor
+        if ('AbsoluteOrientationSensor' in window) {
+            const orientationSensor = new AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'device' });
+            orientationSensor.addEventListener('reading', () => { deviceOrientation.fromArray(orientationSensor.quaternion); device.quaternion.copy(deviceOrientation); });
+            orientationSensor.start();
+            gyroscopeDataEl.textContent = 'Status: Active (Absolute Orientation)';
+        } else {
+            gyroscopeDataEl.textContent = 'Error: AbsoluteOrientationSensor not supported.';
+            startButton.disabled = false;
+            return;
+        }
+
+        // 2. Gyroscope (for Angular Velocity Plot)
         if ('Gyroscope' in window) {
             const gyroscope = new Gyroscope({ frequency: 60 });
-            gyroscope.addEventListener('reading', () => angVel = { x: gyroscope.x, y: gyroscope.y, z: gyroscope.z });
+            gyroscope.addEventListener('reading', () => { angVel = { x: gyroscope.x, y: gyroscope.y, z: gyroscope.z }; });
             gyroscope.start();
         }
-    } catch(e) { console.error("Gyroscope plot error:", e)}
-    try {
+
+        // 3. Linear Acceleration Sensor (for Position Calculation)
         if ('LinearAccelerationSensor' in window) {
             const accelerometer = new LinearAccelerationSensor({ frequency: 60 });
-            const deviceAcceleration = new THREE.Vector3();
             accelerometer.addEventListener('reading', () => {
                 const now = accelerometer.timestamp;
                 const accelMagnitude = Math.sqrt(accelerometer.x**2 + accelerometer.y**2 + accelerometer.z**2);
@@ -299,7 +365,7 @@ startButton.addEventListener('click', () => {
                         deviceLinVel.x += accelerometer.x * dt;
                         deviceLinVel.y += accelerometer.y * dt;
                         deviceLinVel.z += accelerometer.z * dt;
-                        deviceAcceleration.set(accelerometer.x, accelerometer.y, accelerometer.z);
+                        const deviceAcceleration = new THREE.Vector3(accelerometer.x, accelerometer.y, accelerometer.z);
                         const worldAcceleration = deviceAcceleration.clone().applyQuaternion(deviceOrientation);
                         worldVelocity.addScaledVector(worldAcceleration, dt);
                     }
@@ -315,8 +381,22 @@ startButton.addEventListener('click', () => {
         } else {
             accelerometerDataEl.textContent = 'Position tracking unavailable.';
         }
-    } catch(e) { console.error("Linear Acceleration error:", e)}
-});
 
+        resetButton.disabled = false;
+
+    } catch (error) {
+        console.error("A critical error occurred during sensor initialization:", error);
+        if (error.name === 'NotAllowedError') {
+            gyroscopeDataEl.textContent = 'Error: Permission to access sensors was denied.';
+        } else {
+            gyroscopeDataEl.textContent = `Error: ${error.name}.`;
+        }
+        accelerometerDataEl.textContent = 'See console for details. Is the page HTTPS?';
+        startButton.disabled = false;
+    }
+}
+
+startButton.addEventListener('click', startSensors);
 resetButton.addEventListener('click', resetTrace);
+
 initThree();

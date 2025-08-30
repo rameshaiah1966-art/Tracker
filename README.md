@@ -89,12 +89,8 @@ If you click the button and the 3D model does not start moving, and you are not 
 1.  **Not Using HTTPS:** The browser will silently fail to access sensors if the page is not loaded over a secure `https://` connection.
     -   **Solution:** Make sure the URL in your browser's address bar starts with `https://` and not `http://` or `file://`. Follow the instructions above to use the `http-server --ssl` command.
 
-2.  **Sensor Permissions are Blocked:** You may have previously denied sensor access for this site, or your browser may be configured to block them by default.
-    -   **Solution:**
-        -   In your browser, click the padlock icon in the address bar next to the URL.
-        -   Go to "Site settings" or "Permissions".
-        -   Find the "Sensors" or "Motion Sensors" permission and make sure it is set to "Allow".
-        -   Reload the page and try again.
+2.  **Sensor Permissions are Blocked:** If you have previously denied permission for this site, the application will show a "Permission denied" error. To fix this, you must manually edit your browser's site settings.
+    -   **Solution:** In your browser, click the padlock icon in the address bar next to the URL. Go to "Site settings" or "Permissions". Find "Motion Sensors" and change the setting from "Block" to "Allow" (or "Ask"). Reload the page and try again.
 
 3.  **Browser or Device Not Supported:** The Web Sensor APIs are modern features and may not be supported on all browsers or devices.
     -   **Solution:** This application works best on up-to-date versions of Chrome or Firefox on a modern smartphone (Android or iOS). It may not work on desktop browsers (as they lack the required sensors) or on older mobile browsers.
