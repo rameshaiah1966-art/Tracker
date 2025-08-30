@@ -1,32 +1,29 @@
 console.log("Script loaded. Three.js version:", THREE.REVISION);
 
+// --- DOM Elements ---
 const startButton = document.getElementById('start-button');
 const resetButton = document.getElementById('reset-button');
 const accelerometerDataEl = document.getElementById('accelerometer-data');
 const gyroscopeDataEl = document.getElementById('gyroscope-data');
-
-// --- UI Elements ---
 const angVelBars = { x: document.getElementById('ang-vel-x'), y: document.getElementById('ang-vel-y'), z: document.getElementById('ang-vel-z') };
 const linVelBars = { x: document.getElementById('lin-vel-x'), y: document.getElementById('lin-vel-y'), z: document.getElementById('lin-vel-z') };
 const distEls = { x: document.getElementById('dist-x'), y: document.getElementById('dist-y'), z: document.getElementById('dist-z') };
 const mapCanvas = document.getElementById('map-canvas');
 const mapCtx = mapCanvas.getContext('2d');
+const graphCanvas = document.getElementById('distance-graph-canvas');
+const graphCtx = graphCanvas.getContext('2d');
 
-// --- State Variables & Filter Constants ---
-let deviceLinVel = { x: 0, y: 0, z: 0 };
-let angVel = { x: 0, y: 0, z: 0 };
-let worldPosition = new THREE.Vector3(0, 0, 0);
-let worldVelocity = new THREE.Vector3(0, 0, 0);
-let deviceOrientation = new THREE.Quaternion();
-let lastTimestamp = null;
+// --- State Variables & Constants ---
+let deviceLinVel = { x: 0, y: 0, z: 0 }, angVel = { x: 0, y: 0, z: 0 };
+let worldPosition = new THREE.Vector3(0, 0, 0), worldVelocity = new THREE.Vector3(0, 0, 0);
+let deviceOrientation = new THREE.Quaternion(), lastTimestamp = null;
 const ZUPT_ACCEL_THRESHOLD = 0.2, ZUPT_GYRO_THRESHOLD = 0.2, ZUPT_SAMPLES_NEEDED = 15;
 let zuptSampleCount = 0;
-
-// --- Three.js Setup ---
-const sceneContainer = document.getElementById('scene-container');
 let scene, camera, renderer, device, traceLine;
-let tracePoints = [];
+let tracePoints = [], positionHistory = [];
+const MAX_HISTORY = 500;
 
+// --- Main Setup ---
 function initThree() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf0f0f0);
@@ -38,31 +35,26 @@ function initThree() {
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(1, 2, 3);
     scene.add(directionalLight);
-    const gridHelper = new THREE.GridHelper(30, 30);
-    scene.add(gridHelper);
-    const axesHelper = new THREE.AxesHelper(1);
-    scene.add(axesHelper);
+    scene.add(new THREE.GridHelper(30, 30));
+    scene.add(new THREE.AxesHelper(1));
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
     sceneContainer.appendChild(renderer.domElement);
 
-    const geometry = new THREE.BoxGeometry(0.5, 1, 0.075);
-    const material = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.2 });
-    device = new THREE.Mesh(geometry, material);
+    device = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.075), new THREE.MeshStandardMaterial({ color: 0x333333 }));
     scene.add(device);
 
-    const traceMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
-    const traceGeometry = new THREE.BufferGeometry();
-    traceLine = new THREE.Line(traceGeometry, traceMaterial);
+    traceLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xff0000 }));
     scene.add(traceLine);
-    resetTrace();
 
+    resetTrace();
     window.addEventListener('resize', onWindowResize, false);
     onWindowResize();
     animate();
 }
 
+// --- UI & Drawing Functions ---
 function onWindowResize() {
     if (!renderer || !camera || !sceneContainer) return;
     camera.aspect = sceneContainer.clientWidth / sceneContainer.clientHeight;
@@ -70,6 +62,8 @@ function onWindowResize() {
     renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
     mapCanvas.width = mapCanvas.clientWidth;
     mapCanvas.height = mapCanvas.clientHeight;
+    graphCanvas.width = graphCanvas.clientWidth;
+    graphCanvas.height = graphCanvas.clientHeight;
 }
 
 function drawMap() {
@@ -111,9 +105,36 @@ function updateBar(barElement, value, maxVal) {
     barElement.style.transform = value < 0 ? 'translateX(-100%)' : 'translateX(0%)';
 }
 
+function drawDistanceGraph() {
+    if (!graphCtx || positionHistory.length < 2) return;
+    graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+    let min = 0, max = 0;
+    positionHistory.forEach(p => {
+        min = Math.min(min, p.x, p.y, p.z);
+        max = Math.max(max, p.x, p.y, p.z);
+    });
+    const range = Math.max(Math.abs(min), Math.abs(max)) * 2;
+    const scale = range > 0 ? (graphCanvas.height * 0.8) / range : 1;
+    const colors = { x: 'red', y: 'green', z: 'blue' };
+    ['x', 'y', 'z'].forEach(axis => {
+        graphCtx.strokeStyle = colors[axis];
+        graphCtx.lineWidth = 1;
+        graphCtx.beginPath();
+        positionHistory.forEach((p, i) => {
+            const canvasX = (i / (positionHistory.length - 1)) * graphCanvas.width;
+            const canvasY = (graphCanvas.height / 2) - (p[axis] * scale);
+            if (i === 0) { graphCtx.moveTo(canvasX, canvasY); } else { graphCtx.lineTo(canvasX, canvasY); }
+        });
+        graphCtx.stroke();
+    });
+}
+
 function animate() {
     requestAnimationFrame(animate);
     device.position.copy(worldPosition);
+    if (positionHistory.push(worldPosition.clone()) > MAX_HISTORY) {
+        positionHistory.shift();
+    }
     const lastPoint = tracePoints[tracePoints.length - 1];
     if (lastPoint && device.position.distanceTo(lastPoint) > 0.05) {
         tracePoints.push(device.position.clone());
@@ -128,31 +149,24 @@ function animate() {
         const maxDim = Math.max(size.x, size.y, size.z);
         const fov = camera.fov * (Math.PI / 180);
         const cameraDistance = Math.abs(maxDim / (2 * Math.tan(fov / 2)));
-        const margin = 1.5;
-        const newCamPos = new THREE.Vector3(center.x, center.y + size.y / 2, center.z + cameraDistance * margin);
+        const newCamPos = new THREE.Vector3(center.x, center.y + size.y / 2, center.z + cameraDistance * 1.5);
         camera.position.lerp(newCamPos, 0.05);
         camera.lookAt(center);
     }
     renderer.render(scene, camera);
     drawMap();
-    updateBar(angVelBars.x, angVel.x, 10);
-    updateBar(angVelBars.y, angVel.y, 10);
-    updateBar(angVelBars.z, angVel.z, 10);
-    updateBar(linVelBars.x, deviceLinVel.x, 5);
-    updateBar(linVelBars.y, deviceLinVel.y, 5);
-    updateBar(linVelBars.z, deviceLinVel.z, 5);
-    distEls.x.textContent = worldPosition.x.toFixed(2);
-    distEls.y.textContent = worldPosition.y.toFixed(2);
-    distEls.z.textContent = worldPosition.z.toFixed(2);
+    drawDistanceGraph();
+    updateBar(angVelBars.x, angVel.x, 10); updateBar(angVelBars.y, angVel.y, 10); updateBar(angVelBars.z, angVel.z, 10);
+    updateBar(linVelBars.x, deviceLinVel.x, 5); updateBar(linVelBars.y, deviceLinVel.y, 5); updateBar(linVelBars.z, deviceLinVel.z, 5);
+    distEls.x.textContent = worldPosition.x.toFixed(2); distEls.y.textContent = worldPosition.y.toFixed(2); distEls.z.textContent = worldPosition.z.toFixed(2);
 }
 
 function resetTrace() {
-    worldPosition.set(0, 0, 0);
-    worldVelocity.set(0, 0, 0);
+    worldPosition.set(0, 0, 0); worldVelocity.set(0, 0, 0);
     deviceLinVel = { x: 0, y: 0, z: 0 };
-    lastTimestamp = null;
-    zuptSampleCount = 0;
+    lastTimestamp = null; zuptSampleCount = 0;
     tracePoints = [new THREE.Vector3(0, 0, 0)];
+    positionHistory = [new THREE.Vector3(0, 0, 0)];
     if (traceLine) traceLine.geometry.setFromPoints(tracePoints);
 }
 
@@ -162,7 +176,7 @@ startButton.addEventListener('click', () => {
     resetButton.disabled = false;
     try {
         if ('AbsoluteOrientationSensor' in window) {
-            const sensor = new AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'screen' });
+            const sensor = new AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'device' });
             sensor.addEventListener('reading', () => {
                 deviceOrientation.fromArray(sensor.quaternion);
                 device.quaternion.copy(deviceOrientation);
@@ -170,7 +184,7 @@ startButton.addEventListener('click', () => {
             sensor.start();
             gyroscopeDataEl.textContent = 'Status: Active (Absolute Orientation)';
         } else if ('RelativeOrientationSensor' in window) {
-            const sensor = new RelativeOrientationSensor({ frequency: 60, referenceFrame: 'screen' });
+            const sensor = new RelativeOrientationSensor({ frequency: 60, referenceFrame: 'device' });
             sensor.addEventListener('reading', () => {
                 deviceOrientation.fromArray(sensor.quaternion);
                 device.quaternion.copy(deviceOrientation);
