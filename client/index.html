@@ -14,7 +14,14 @@
         <p>Accelerometer: <span id="accelerometer-data">Waiting for user permission...</span></p>
         <p>Gyroscope: <span id="gyroscope-data">Waiting for user permission...</span></p>
     </div>
-    <div id="scene-container"></div>
+
+    <div class="view-container">
+        <div id="scene-container"></div>
+        <div id="map-container">
+            <h3>2D Top-Down View (X/Y Plane)</h3>
+            <canvas id="map-canvas"></canvas>
+        </div>
+    </div>
 
     <div id="velocity-plots">
         <h2>Velocity Plots</h2>

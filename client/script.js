@@ -9,6 +9,8 @@ const gyroscopeDataEl = document.getElementById('gyroscope-data');
 const angVelBars = { x: document.getElementById('ang-vel-x'), y: document.getElementById('ang-vel-y'), z: document.getElementById('ang-vel-z') };
 const linVelBars = { x: document.getElementById('lin-vel-x'), y: document.getElementById('lin-vel-y'), z: document.getElementById('lin-vel-z') };
 const distEls = { x: document.getElementById('dist-x'), y: document.getElementById('dist-y'), z: document.getElementById('dist-z') };
+const mapCanvas = document.getElementById('map-canvas');
+const mapCtx = mapCanvas.getContext('2d');
 
 // --- State Variables & Filter Constants ---
 let deviceLinVel = { x: 0, y: 0, z: 0 };
@@ -17,22 +19,7 @@ let worldPosition = new THREE.Vector3(0, 0, 0);
 let worldVelocity = new THREE.Vector3(0, 0, 0);
 let deviceOrientation = new THREE.Quaternion();
 let lastTimestamp = null;
-
-// ZUPT (Zero-Velocity Update) Filter parameters. This is a simple but effective
-// filter to combat drift. When the device is held still (low acceleration and rotation),
-// the velocity is reset to zero, preventing it from drifting.
-
-// How sensitive the filter is to accelerometer noise. A lower value means the
-// device must be held more still to trigger the filter.
-const ZUPT_ACCEL_THRESHOLD = 0.2; // m/s^2
-
-// How sensitive the filter is to gyroscope noise. A lower value means the
-// device must be held more still to trigger the filter.
-const ZUPT_GYRO_THRESHOLD = 0.2;  // rad/s
-
-// How many consecutive "still" samples are needed to trigger the velocity reset.
-// A higher value makes the filter less sensitive to brief pauses.
-const ZUPT_SAMPLES_NEEDED = 15; // ~250ms at 60Hz
+const ZUPT_ACCEL_THRESHOLD = 0.2, ZUPT_GYRO_THRESHOLD = 0.2, ZUPT_SAMPLES_NEEDED = 15;
 let zuptSampleCount = 0;
 
 // --- Three.js Setup ---
@@ -72,6 +59,7 @@ function initThree() {
     resetTrace();
 
     window.addEventListener('resize', onWindowResize, false);
+    onWindowResize();
     animate();
 }
 
@@ -80,6 +68,39 @@ function onWindowResize() {
     camera.aspect = sceneContainer.clientWidth / sceneContainer.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
+    mapCanvas.width = mapCanvas.clientWidth;
+    mapCanvas.height = mapCanvas.clientHeight;
+}
+
+function drawMap() {
+    if (!mapCtx || tracePoints.length < 1) return;
+    mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+    const boundingBox = new THREE.Box3().setFromPoints(tracePoints);
+    const center = new THREE.Vector3();
+    boundingBox.getCenter(center);
+    const size = new THREE.Vector3();
+    boundingBox.getSize(size);
+    if (size.x === 0 && size.y === 0) { size.x = 1; size.y = 1; }
+    const margin = 0.9;
+    const scale = Math.min((mapCanvas.width * margin) / size.x, (mapCanvas.height * margin) / size.y);
+    const canvasCenterX = mapCanvas.width / 2;
+    const canvasCenterY = mapCanvas.height / 2;
+    mapCtx.strokeStyle = 'red';
+    mapCtx.lineWidth = 2;
+    mapCtx.beginPath();
+    tracePoints.forEach((point, index) => {
+        const canvasX = canvasCenterX + (point.x - center.x) * scale;
+        const canvasY = canvasCenterY - (point.y - center.y) * scale;
+        if (index === 0) { mapCtx.moveTo(canvasX, canvasY); } else { mapCtx.lineTo(canvasX, canvasY); }
+    });
+    mapCtx.stroke();
+    const lastPoint = tracePoints[tracePoints.length - 1];
+    const lastPointX = canvasCenterX + (lastPoint.x - center.x) * scale;
+    const lastPointY = canvasCenterY - (lastPoint.y - center.y) * scale;
+    mapCtx.fillStyle = 'blue';
+    mapCtx.beginPath();
+    mapCtx.arc(lastPointX, lastPointY, 5, 0, 2 * Math.PI);
+    mapCtx.fill();
 }
 
 function updateBar(barElement, value, maxVal) {
@@ -93,13 +114,11 @@ function updateBar(barElement, value, maxVal) {
 function animate() {
     requestAnimationFrame(animate);
     device.position.copy(worldPosition);
-
     const lastPoint = tracePoints[tracePoints.length - 1];
     if (lastPoint && device.position.distanceTo(lastPoint) > 0.05) {
         tracePoints.push(device.position.clone());
         traceLine.geometry.setFromPoints(tracePoints);
     }
-
     if (tracePoints.length > 1) {
         const boundingBox = new THREE.Box3().setFromPoints(tracePoints);
         const center = new THREE.Vector3();
@@ -114,9 +133,8 @@ function animate() {
         camera.position.lerp(newCamPos, 0.05);
         camera.lookAt(center);
     }
-
     renderer.render(scene, camera);
-
+    drawMap();
     updateBar(angVelBars.x, angVel.x, 10);
     updateBar(angVelBars.y, angVel.y, 10);
     updateBar(angVelBars.z, angVel.z, 10);
@@ -135,9 +153,7 @@ function resetTrace() {
     lastTimestamp = null;
     zuptSampleCount = 0;
     tracePoints = [new THREE.Vector3(0, 0, 0)];
-    if (traceLine) {
-        traceLine.geometry.setFromPoints(tracePoints);
-    }
+    if (traceLine) traceLine.geometry.setFromPoints(tracePoints);
 }
 
 // --- Event Listeners ---
@@ -146,7 +162,7 @@ startButton.addEventListener('click', () => {
     resetButton.disabled = false;
     try {
         if ('AbsoluteOrientationSensor' in window) {
-            const sensor = new AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'device' });
+            const sensor = new AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'screen' });
             sensor.addEventListener('reading', () => {
                 deviceOrientation.fromArray(sensor.quaternion);
                 device.quaternion.copy(deviceOrientation);
@@ -154,7 +170,7 @@ startButton.addEventListener('click', () => {
             sensor.start();
             gyroscopeDataEl.textContent = 'Status: Active (Absolute Orientation)';
         } else if ('RelativeOrientationSensor' in window) {
-            const sensor = new RelativeOrientationSensor({ frequency: 60, referenceFrame: 'device' });
+            const sensor = new RelativeOrientationSensor({ frequency: 60, referenceFrame: 'screen' });
             sensor.addEventListener('reading', () => {
                 deviceOrientation.fromArray(sensor.quaternion);
                 device.quaternion.copy(deviceOrientation);
@@ -176,10 +192,8 @@ startButton.addEventListener('click', () => {
             const deviceAcceleration = new THREE.Vector3();
             accelerometer.addEventListener('reading', () => {
                 const now = accelerometer.timestamp;
-
                 const accelMagnitude = Math.sqrt(accelerometer.x**2 + accelerometer.y**2 + accelerometer.z**2);
                 const gyroMagnitude = Math.sqrt(angVel.x**2 + angVel.y**2 + angVel.z**2);
-
                 if (accelMagnitude < ZUPT_ACCEL_THRESHOLD && gyroMagnitude < ZUPT_GYRO_THRESHOLD) {
                     zuptSampleCount++;
                     if (zuptSampleCount >= ZUPT_SAMPLES_NEEDED) {
@@ -198,7 +212,6 @@ startButton.addEventListener('click', () => {
                         worldVelocity.addScaledVector(worldAcceleration, dt);
                     }
                 }
-
                 if (lastTimestamp) {
                     const dt = (now - lastTimestamp) / 1000;
                     worldPosition.addScaledVector(worldVelocity, dt);

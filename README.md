@@ -12,8 +12,9 @@ This web application uses your device's sensors (specifically the accelerometer 
     -   Includes a "Reset Position & Trace" button to reset the calculation, which is necessary to manage sensor drift.
 -   **Velocity Plotting:** Visualizes angular and linear velocity in real-time using bar graphs.
 -   **Scene Helpers:** Includes a grid and XYZ axes to provide a clear frame of reference for orientation and movement.
--   **Dynamic Camera:** The camera automatically pans and zooms to keep the entire movement path in view.
--   **Responsive:** The 3D scene adapts to the window size.
+-   **Dynamic Camera:** The camera automatically pans and zooms to keep the entire 3D movement path in view.
+-   **2D Top-Down Map:** Displays a 2D plot of the device's X/Y movement, providing a clear top-down view of the path trace. This view also automatically scales and centers on the path.
+-   **Responsive:** The UI layout adapts to different screen sizes.
 
 ### Important Limitation: Position Tracking Accuracy
 
