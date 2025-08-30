@@ -3,6 +3,91 @@ console.log("Script loaded. Three.js version:", THREE.REVISION);
 // --- DOM Elements ---
 const startButton = document.getElementById('start-button');
 const resetButton = document.getElementById('reset-button');
+// ... (other DOM elements)
+const distEls = { x: document.getElementById('dist-x'), y: document.getElementById('dist-y'), z: document.getElementById('dist-z') };
+// ... (other canvas elements)
+
+// --- State Variables & Constants ---
+let worldPosition = new THREE.Vector3(0, 0, 0);
+let filteredPosition = new THREE.Vector3(0, 0, 0);
+// ... (other state variables)
+let kfX, kfY, kfZ; // To be initialized later
+
+// ... (other constants and variables)
+
+// --- Main Setup ---
+function initThree() {
+    // ... (existing initThree logic)
+    resetTrace(); // This will now also initialize the Kalman filters
+    // ...
+}
+
+// --- UI & Drawing Functions ---
+// ... (onWindowResize, drawMap, updateBar, drawDistanceGraph remain the same)
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    // Apply Kalman filter to the raw position data
+    filteredPosition.x = kfX.filter(worldPosition.x);
+    filteredPosition.y = kfY.filter(worldPosition.y);
+    filteredPosition.z = kfZ.filter(worldPosition.z);
+
+    // ALL visual updates should now use the FILTERED position
+    device.position.copy(filteredPosition);
+    if (positionHistory.push(filteredPosition.clone()) > MAX_HISTORY) {
+        positionHistory.shift();
+    }
+    const lastPoint = tracePoints[tracePoints.length - 1];
+    if (lastPoint && filteredPosition.distanceTo(lastPoint) > 0.05) {
+        tracePoints.push(filteredPosition.clone());
+        traceLine.geometry.setFromPoints(tracePoints);
+    }
+
+    // ... (camera logic remains the same, as it uses tracePoints which are now filtered)
+
+    renderer.render(scene, camera);
+    drawMap();
+    drawDistanceGraph();
+
+    // ... (updateBar logic remains the same)
+
+    // Update distance display with filtered data
+    distEls.x.textContent = filteredPosition.x.toFixed(2);
+    distEls.y.textContent = filteredPosition.y.toFixed(2);
+    distEls.z.textContent = filteredPosition.z.toFixed(2);
+}
+
+function resetTrace() {
+    worldPosition.set(0, 0, 0);
+    worldVelocity.set(0, 0, 0);
+    deviceLinVel = { x: 0, y: 0, z: 0 };
+    lastTimestamp = null;
+    zuptSampleCount = 0;
+
+    // Re-initialize Kalman filters to reset their state
+    kfX = new KalmanFilter({R: 0.01, Q: 3});
+    kfY = new KalmanFilter({R: 0.01, Q: 3});
+    kfZ = new KalmanFilter({R: 0.01, Q: 3});
+
+    // Initialize filtered position
+    filteredPosition.set(0,0,0);
+
+    tracePoints = [new THREE.Vector3(0, 0, 0)];
+    positionHistory = [new THREE.Vector3(0, 0, 0)];
+    if (traceLine) traceLine.geometry.setFromPoints(tracePoints);
+}
+
+// --- Event Listeners ---
+// ... (startButton listener with sensor logic remains the same)
+
+// The rest of the file is the same...
+// I will just paste the full correct file to avoid errors.
+// ... (full file content below)
+console.log("Script loaded. Three.js version:", THREE.REVISION);
+
+const startButton = document.getElementById('start-button');
+const resetButton = document.getElementById('reset-button');
 const accelerometerDataEl = document.getElementById('accelerometer-data');
 const gyroscopeDataEl = document.getElementById('gyroscope-data');
 const angVelBars = { x: document.getElementById('ang-vel-x'), y: document.getElementById('ang-vel-y'), z: document.getElementById('ang-vel-z') };
@@ -13,48 +98,42 @@ const mapCtx = mapCanvas.getContext('2d');
 const graphCanvas = document.getElementById('distance-graph-canvas');
 const graphCtx = graphCanvas.getContext('2d');
 
-// --- State Variables & Constants ---
 let deviceLinVel = { x: 0, y: 0, z: 0 }, angVel = { x: 0, y: 0, z: 0 };
 let worldPosition = new THREE.Vector3(0, 0, 0), worldVelocity = new THREE.Vector3(0, 0, 0);
+let filteredPosition = new THREE.Vector3(0, 0, 0);
 let deviceOrientation = new THREE.Quaternion(), lastTimestamp = null;
 const ZUPT_ACCEL_THRESHOLD = 0.2, ZUPT_GYRO_THRESHOLD = 0.2, ZUPT_SAMPLES_NEEDED = 15;
 let zuptSampleCount = 0;
+let kfX, kfY, kfZ;
 let scene, camera, renderer, device, traceLine;
 let tracePoints = [], positionHistory = [];
 const MAX_HISTORY = 500;
 
-// --- Main Setup ---
 function initThree() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf0f0f0);
     camera = new THREE.PerspectiveCamera(50, sceneContainer.clientWidth / sceneContainer.clientHeight, 0.1, 1000);
     camera.position.set(0, 1.6, 6);
     camera.lookAt(0, 0, 0);
-
     scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(1, 2, 3);
     scene.add(directionalLight);
     scene.add(new THREE.GridHelper(30, 30));
     scene.add(new THREE.AxesHelper(1));
-
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
     sceneContainer.appendChild(renderer.domElement);
-
     device = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.075), new THREE.MeshStandardMaterial({ color: 0x333333 }));
     scene.add(device);
-
     traceLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xff0000 }));
     scene.add(traceLine);
-
     resetTrace();
     window.addEventListener('resize', onWindowResize, false);
     onWindowResize();
     animate();
 }
 
-// --- UI & Drawing Functions ---
 function onWindowResize() {
     if (!renderer || !camera || !sceneContainer) return;
     camera.aspect = sceneContainer.clientWidth / sceneContainer.clientHeight;
@@ -109,10 +188,7 @@ function drawDistanceGraph() {
     if (!graphCtx || positionHistory.length < 2) return;
     graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
     let min = 0, max = 0;
-    positionHistory.forEach(p => {
-        min = Math.min(min, p.x, p.y, p.z);
-        max = Math.max(max, p.x, p.y, p.z);
-    });
+    positionHistory.forEach(p => { min = Math.min(min, p.x, p.y, p.z); max = Math.max(max, p.x, p.y, p.z); });
     const range = Math.max(Math.abs(min), Math.abs(max)) * 2;
     const scale = range > 0 ? (graphCanvas.height * 0.8) / range : 1;
     const colors = { x: 'red', y: 'green', z: 'blue' };
@@ -131,13 +207,16 @@ function drawDistanceGraph() {
 
 function animate() {
     requestAnimationFrame(animate);
-    device.position.copy(worldPosition);
-    if (positionHistory.push(worldPosition.clone()) > MAX_HISTORY) {
+    filteredPosition.x = kfX.filter(worldPosition.x);
+    filteredPosition.y = kfY.filter(worldPosition.y);
+    filteredPosition.z = kfZ.filter(worldPosition.z);
+    device.position.copy(filteredPosition);
+    if (positionHistory.push(filteredPosition.clone()) > MAX_HISTORY) {
         positionHistory.shift();
     }
     const lastPoint = tracePoints[tracePoints.length - 1];
-    if (lastPoint && device.position.distanceTo(lastPoint) > 0.05) {
-        tracePoints.push(device.position.clone());
+    if (lastPoint && filteredPosition.distanceTo(lastPoint) > 0.05) {
+        tracePoints.push(filteredPosition.clone());
         traceLine.geometry.setFromPoints(tracePoints);
     }
     if (tracePoints.length > 1) {
@@ -158,37 +237,36 @@ function animate() {
     drawDistanceGraph();
     updateBar(angVelBars.x, angVel.x, 10); updateBar(angVelBars.y, angVel.y, 10); updateBar(angVelBars.z, angVel.z, 10);
     updateBar(linVelBars.x, deviceLinVel.x, 5); updateBar(linVelBars.y, deviceLinVel.y, 5); updateBar(linVelBars.z, deviceLinVel.z, 5);
-    distEls.x.textContent = worldPosition.x.toFixed(2); distEls.y.textContent = worldPosition.y.toFixed(2); distEls.z.textContent = worldPosition.z.toFixed(2);
+    distEls.x.textContent = filteredPosition.x.toFixed(2);
+    distEls.y.textContent = filteredPosition.y.toFixed(2);
+    distEls.z.textContent = filteredPosition.z.toFixed(2);
 }
 
 function resetTrace() {
     worldPosition.set(0, 0, 0); worldVelocity.set(0, 0, 0);
     deviceLinVel = { x: 0, y: 0, z: 0 };
     lastTimestamp = null; zuptSampleCount = 0;
+    kfX = new KalmanFilter({R: 0.01, Q: 3});
+    kfY = new KalmanFilter({R: 0.01, Q: 3});
+    kfZ = new KalmanFilter({R: 0.01, Q: 3});
+    filteredPosition.set(0,0,0);
     tracePoints = [new THREE.Vector3(0, 0, 0)];
     positionHistory = [new THREE.Vector3(0, 0, 0)];
     if (traceLine) traceLine.geometry.setFromPoints(tracePoints);
 }
 
-// --- Event Listeners ---
 startButton.addEventListener('click', () => {
     startButton.disabled = true;
     resetButton.disabled = false;
     try {
         if ('AbsoluteOrientationSensor' in window) {
             const sensor = new AbsoluteOrientationSensor({ frequency: 60, referenceFrame: 'device' });
-            sensor.addEventListener('reading', () => {
-                deviceOrientation.fromArray(sensor.quaternion);
-                device.quaternion.copy(deviceOrientation);
-            });
+            sensor.addEventListener('reading', () => { deviceOrientation.fromArray(sensor.quaternion); device.quaternion.copy(deviceOrientation); });
             sensor.start();
             gyroscopeDataEl.textContent = 'Status: Active (Absolute Orientation)';
         } else if ('RelativeOrientationSensor' in window) {
             const sensor = new RelativeOrientationSensor({ frequency: 60, referenceFrame: 'device' });
-            sensor.addEventListener('reading', () => {
-                deviceOrientation.fromArray(sensor.quaternion);
-                device.quaternion.copy(deviceOrientation);
-            });
+            sensor.addEventListener('reading', () => { deviceOrientation.fromArray(sensor.quaternion); device.quaternion.copy(deviceOrientation); });
             sensor.start();
             gyroscopeDataEl.textContent = 'Status: Active (Relative Fallback)';
         }
@@ -241,5 +319,4 @@ startButton.addEventListener('click', () => {
 });
 
 resetButton.addEventListener('click', resetTrace);
-
 initThree();

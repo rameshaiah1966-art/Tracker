@@ -17,13 +17,14 @@ This web application uses your device's sensors (specifically the accelerometer 
 -   **Distance-over-Time Graph:** Plots the calculated X, Y, and Z distance components over time on a 2D graph.
 -   **Responsive:** The UI layout adapts to different screen sizes.
 
-### Important Limitation: Position Tracking Accuracy
+### Position Tracking & Accuracy
 
-Calculating position from phone sensors (IMU) is a classic engineering problem. Even tiny, unavoidable errors in the sensor readings accumulate very quickly, causing the calculated position to "drift" away from the true position.
+This application uses several advanced techniques to provide the best possible position tracking:
+- **World-Frame Calculation:** It uses the `AbsoluteOrientationSensor` to transform the device's acceleration into a fixed, real-world coordinate system before performing calculations.
+- **ZUPT (Zero-Velocity Update) Filter:** This filter detects when the device is held still and resets the calculated velocity to zero. This is the primary mechanism for preventing the position from "drifting" over time when the device is not moving.
+- **Kalman Filter Smoothing:** A simple 1D Kalman filter is applied independently to the calculated X, Y, and Z position data. This helps to smooth out the visual output and reduce high-frequency jitter.
 
-To combat this, this application implements a **Zero-Velocity Update (ZUPT) filter**. This filter detects when the device is being held still and resets the calculated velocity to zero, preventing drift when the device is not moving.
-
-While this makes the position tracking much more stable, **some drift during active movement is still unavoidable**. The ZUPT filter does not correct for errors that accumulate while the device is in motion. The "Reset Position & Trace" button is provided to clear the calculated position and start fresh.
+**Limitation:** Despite these filters, tracking position by integrating acceleration is fundamentally prone to error. During active movement, small sensor inaccuracies will still accumulate, causing the calculated path to differ from the real-world path. The "Reset" button is provided to clear this accumulated error.
 
 ## How to Run
 
