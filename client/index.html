@@ -3,61 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gyroscope Tracker</title>
+    <title>Signal Visualizer</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Gyroscope and Accelerometer Data</h1>
-    <button id="start-button">Start Sensors</button>
-    <button id="reset-button" disabled>Reset Position & Trace</button>
-    <div id="sensor-data">
-        <p>Accelerometer: <span id="accelerometer-data">Waiting for user permission...</span></p>
-        <p>Gyroscope: <span id="gyroscope-data">Waiting for user permission...</span></p>
-    </div>
-
-    <div class="view-container">
-        <div id="scene-container"></div>
-        <div id="map-container">
-            <h3>2D Top-Down View (X/Y Plane)</h3>
-            <canvas id="map-canvas"></canvas>
-        </div>
-    </div>
-
-    <div id="velocity-plots">
-        <h2>Velocity Plots</h2>
-        <div class="plot-container">
-            <h3>Angular Velocity (from Gyroscope)</h3>
-            <div class="plot" id="angular-velocity-plot">
-                <div class="axis"><span class="label">X:</span><div class="bar-container"><div class="bar" id="ang-vel-x"></div></div></div>
-                <div class="axis"><span class="label">Y:</span><div class="bar-container"><div class="bar" id="ang-vel-y"></div></div></div>
-                <div class="axis"><span class="label">Z:</span><div class="bar-container"><div class="bar" id="ang-vel-z"></div></div></div>
+    <h1>Signal Visualizer</h1>
+    <div id="app-container">
+        <canvas id="waveform-canvas"></canvas>
+        <div id="controls">
+            <button id="start-stop-button">Start</button>
+            <div class="control-group">
+                <label for="frequency-slider">Frequency</label>
+                <input type="range" id="frequency-slider" min="20" max="20000" value="440" step="1">
+                <span id="frequency-display">440 Hz</span>
             </div>
-        </div>
-        <div class="plot-container">
-            <h3>Linear Velocity (from Accelerometer)</h3>
-            <p class="note">Note: This value drifts significantly over time due to sensor inaccuracies and is for demonstration only.</p>
-            <div class="plot" id="linear-velocity-plot">
-                <div class="axis"><span class="label">X:</span><div class="bar-container"><div class="bar" id="lin-vel-x"></div></div></div>
-                <div class="axis"><span class="label">Y:</span><div class="bar-container"><div class="bar" id="lin-vel-y"></div></div></div>
-                <div class="axis"><span class="label">Z:</span><div class="bar-container"><div class="bar" id="lin-vel-z"></div></div></div>
+            <div class="control-group">
+                <label>Band</label>
+                <div id="band-buttons">
+                    <button class="band-button active" data-band="hz">Hz</button>
+                    <button class="band-button" data-band="khz">kHz</button>
+                    <button class="band-button" data-band="mhz">MHz</button>
+                </div>
+            </div>
+             <div class="control-group">
+                <label for="gain-slider">Gain</label>
+                <input type="range" id="gain-slider" min="0" max="1" value="0.5" step="0.01">
+                <span id="gain-display">0.5</span>
             </div>
         </div>
     </div>
-
-    <div id="distance-display">
-        <h2>Distance from Start</h2>
-        <p>X: <span id="dist-x">0.00</span> m</p>
-        <p>Y: <span id="dist-y">0.00</span> m</p>
-        <p>Z: <span id="dist-z">0.00</span> m</p>
-    </div>
-
-    <div id="graph-container">
-        <h3>Distance over Time</h3>
-        <canvas id="distance-graph-canvas"></canvas>
-    </div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/kalmanjs@1.1.0/dist/kalman.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
